@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Copy Trader</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: monospace; background: #0d0d0f; color: #e0e0e0; padding: 20px; }
+  h1 { font-size: 18px; color: #fff; margin-bottom: 4px; }
+  .sub { font-size: 12px; color: #555; margin-bottom: 20px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+  .tab { padding: 6px 16px; border-radius: 6px; font-size: 12px; cursor: pointer; background: #1a1a1f; border: 1px solid #2a2a30; color: #888; }
+  .tab.active { background: #22c55e22; border-color: #22c55e55; color: #22c55e; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* STATS */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .stat { background: #18181c; border: 1px solid #2a2a30; border-radius: 10px; padding: 16px; }
+  .stat .label { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .stat .value { font-size: 22px; font-weight: bold; }
+  .stat .value.green { color: #22c55e; }
+  .stat .value.red { color: #ef4444; }
+  .stat .value.white { color: #fff; }
+  .stat .value.yellow { color: #fbbf24; }
+
+  /* GRID */
+  .grid { display: grid; grid-template-columns: 260px 1fr; gap: 16px; }
+  .panel { background: #18181c; border: 1px solid #2a2a30; border-radius: 10px; padding: 16px; }
+  .panel h2 { font-size: 11px; color: #555; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  /* WALLETS */
+  .wallet-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid #1a1a20; font-size: 12px; }
+  .wallet-row:last-child { border-bottom: none; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; flex-shrink: 0; }
+
+  /* TRADES */
+  .header-row { display: grid; grid-template-columns: 65px 48px 130px 120px 85px 70px; gap: 8px; padding: 5px 8px; font-size: 10px; color: #444; text-transform: uppercase; border-bottom: 1px solid #222; }
+  .trade-row { display: grid; grid-template-columns: 65px 48px 130px 120px 85px 70px; gap: 8px; align-items: center; padding: 9px 8px; border-bottom: 1px solid #1a1a20; font-size: 12px; }
+  .trade-row:hover { background: #1e1e24; }
+  .badge { padding: 2px 7px; border-radius: 4px; font-weight: bold; font-size: 10px; text-align: center; }
+  .badge.BUY { background: #14532d; color: #4ade80; }
+  .badge.SELL { background: #450a0a; color: #f87171; }
+  .token { color: #60a5fa; }
+  .wallet-cell { color: #a78bfa; }
+  .amount { color: #fbbf24; }
+  .sig a { color: #444; font-size: 10px; text-decoration: none; }
+  .sig a:hover { color: #888; }
+
+  /* PAPER */
+  .paper-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .history-row { display: grid; grid-template-columns: 80px 100px 80px 80px 80px 60px; gap: 8px; align-items: center; padding: 8px; border-bottom: 1px solid #1a1a20; font-size: 12px; }
+  .history-row:hover { background: #1e1e24; }
+  .win { color: #22c55e; font-weight: bold; }
+  .loss { color: #ef4444; font-weight: bold; }
+  .pos-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #1a1a20; font-size: 12px; }
+  .pos-row:last-child { border-bottom: none; }
+
+  .status-bar { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #555; margin-bottom: 16px; }
+  .pulse { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .empty { color: #333; font-size: 13px; padding: 24px; text-align: center; }
+</style>
+</head>
+<body>
+<h1>Copy Trader — Solana</h1>
+<p class="sub">Sistema de paper trading en tiempo real</p>
+
+<div class="status-bar">
+  <div class="pulse"></div>
+  <span id="status-text">Conectando...</span>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab('trades')">Trades en vivo</div>
+  <div class="tab" onclick="showTab('paper')">Paper Trading</div>
+</div>
+
+<!-- PÁGINA TRADES -->
+<div class="page active" id="page-trades">
+  <div class="grid">
+    <div class="panel">
+      <h2>Wallets monitoreadas</h2>
+      <div id="wallets-list"><div class="empty">Cargando...</div></div>
+    </div>
+    <div class="panel">
+      <h2>Trades detectados</h2>
+      <div class="header-row">
+        <span>Hora</span><span>Acción</span><span>Token</span><span>Wallet</span><span>Cantidad</span><span>TX</span>
+      </div>
+      <div id="trades-list"><div class="empty">Esperando trades...</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- PÁGINA PAPER TRADING -->
+<div class="page" id="page-paper">
+  <div class="stats">
+    <div class="stat">
+      <div class="label">Capital actual</div>
+      <div class="value white" id="capital">$1,000</div>
+    </div>
+    <div class="stat">
+      <div class="label">PnL total</div>
+      <div class="value" id="pnl">$0</div>
+    </div>
+    <div class="stat">
+      <div class="label">Win rate</div>
+      <div class="value yellow" id="winrate">0%</div>
+    </div>
+    <div class="stat">
+      <div class="label">Trades totales</div>
+      <div class="value white" id="trades-total">0</div>
+    </div>
+  </div>
+
+  <div class="paper-grid">
+    <div class="panel">
+      <h2>Posiciones abiertas</h2>
+      <div id="portfolio-list"><div class="empty">Sin posiciones abiertas</div></div>
+    </div>
+    <div class="panel">
+      <h2>Historial de trades</h2>
+      <div style="display:grid;grid-template-columns:80px 100px 80px 80px 80px 60px;gap:8px;padding:5px 8px;font-size:10px;color:#444;text-transform:uppercase;border-bottom:1px solid #222">
+        <span>Token</span><span>Copiado de</span><span>Invertido</span><span>Retorno</span><span>PnL</span><span>Result</span>
+      </div>
+      <div id="history-list"><div class="empty">Sin trades cerrados aún</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', ['trades','paper'][i] === name);
+  });
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+}
+
+async function fetchWallets() {
+  try {
+    const r = await fetch('/api/wallets');
+    const wallets = await r.json();
+    document.getElementById('wallets-list').innerHTML = wallets.map(w => `
+      <div class="wallet-row">
+        <div class="dot"></div>
+        <span style="color:#aaa">${w.short}</span>
+        <span style="color:#333;font-size:11px;margin-left:auto">active</span>
+      </div>`).join('');
+  } catch(e) {}
+}
+
+async function fetchTrades() {
+  try {
+    const r = await fetch('/api/trades');
+    const trades = await r.json();
+    document.getElementById('status-text').textContent = `Activo — ${trades.length} trades detectados`;
+    if (!trades.length) return;
+    document.getElementById('trades-list').innerHTML = trades.slice(0,50).map(t => `
+      <div class="trade-row">
+        <span style="color:#555">${t.time}</span>
+        <span class="badge ${t.action}">${t.action}</span>
+        <span class="token">${t.token_short}</span>
+        <span class="wallet-cell">${t.wallet_short}</span>
+        <span class="amount">${Number(t.amount).toLocaleString()}</span>
+        <span class="sig"><a href="https://solscan.io/tx/${t.signature}" target="_blank">solscan ↗</a></span>
+      </div>`).join('');
+  } catch(e) {}
+}
+
+async function fetchPaper() {
+  try {
+    const r = await fetch('/api/paper');
+    const d = await r.json();
+
+    const pnl = d.pnl_total || 0;
+    document.getElementById('capital').textContent = '$' + (d.capital_actual || 0).toLocaleString();
+    document.getElementById('pnl').textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
+    document.getElementById('pnl').className = 'value ' + (pnl >= 0 ? 'green' : 'red');
+    document.getElementById('winrate').textContent = (d.win_rate || 0) + '%';
+    document.getElementById('trades-total').textContent = (d.wins || 0) + 'W / ' + (d.losses || 0) + 'L';
+
+    const hist = (d.historial || []).slice().reverse();
+    document.getElementById('history-list').innerHTML = hist.length ? hist.map(t => `
+      <div class="history-row">
+        <span class="token">${t.token}</span>
+        <span class="wallet-cell">${t.copied_from}</span>
+        <span style="color:#aaa">$${t.invested}</span>
+        <span style="color:#aaa">$${t.returned}</span>
+        <span class="${t.pnl >= 0 ? 'win' : 'loss'}">${t.pnl >= 0 ? '+' : ''}$${t.pnl}</span>
+        <span class="${t.result === 'WIN' ? 'win' : 'loss'}">${t.result}</span>
+      </div>`).join('') : '<div class="empty">Sin trades cerrados aún</div>';
+  } catch(e) {}
+}
+
+async function fetchPortfolio() {
+  try {
+    const r = await fetch('/api/portfolio');
+    const positions = await r.json();
+    document.getElementById('portfolio-list').innerHTML = positions.length ? positions.map(p => `
+      <div class="pos-row">
+        <span class="token">${p.token_short}</span>
+        <span style="color:#555;font-size:11px">desde ${p.entry_time}</span>
+        <span style="color:#aaa">$${p.invested.toFixed(2)}</span>
+        <span style="color:#555;font-size:10px">copiando ${p.copied_from}</span>
+      </div>`).join('') : '<div class="empty">Sin posiciones abiertas</div>';
+  } catch(e) {}
+}
+
+fetchWallets();
+fetchTrades();
+fetchPaper();
+fetchPortfolio();
+setInterval(fetchTrades, 5000);
+setInterval(fetchPaper, 8000);
+setInterval(fetchPortfolio, 8000);
+setInterval(fetchWallets, 30000);
+</script>
+</body>
+</html>
