@@ -137,6 +137,30 @@
       "sells": 55,
       "estimated_pnl_sol": 0.021,
       "source": "birdeye+helius"
+    },
+    {
+      "address": "4XnaCBWAhZKVVAynJZLp8RcAjGG5ACcxUSdj5iVSZE4B",
+      "sol_balance": 1.258,
+      "tx_count": 100,
+      "age_days": 19.0,
+      "last_active_days": 0.0,
+      "unique_tokens": 14,
+      "buys": 21,
+      "sells": 14,
+      "estimated_pnl_sol": -2.616,
+      "source": "birdeye+helius"
+    },
+    {
+      "address": "Gdh7gGcHFdLutmQRHL93HDUELCjb569Xg8Lmgs79iEAy",
+      "sol_balance": 1.7,
+      "tx_count": 100,
+      "age_days": 26.0,
+      "last_active_days": 0.0,
+      "unique_tokens": 14,
+      "buys": 17,
+      "sells": 18,
+      "estimated_pnl_sol": -0.34,
+      "source": "birdeye+helius"
     }
   ],
   "addresses": [
@@ -152,6 +176,8 @@
     "nDgLWYrckPzTGmtLx5r4SWnV8YMMx9sorHEBHggRRon",
     "AhnQ4wmz8deZW7bPcmnoVTbe4PZpJky9Q5QZpxXKCLUe",
     "A93wD3QVxHNDnrh63ERXww23PeWNDeuZn4BmiMsXQTnx",
-    "FQbUpz7MTsWdyfnk1VtGheKjsoN5o22sDX72hx8UCzx"
+    "FQbUpz7MTsWdyfnk1VtGheKjsoN5o22sDX72hx8UCzx",
+    "4XnaCBWAhZKVVAynJZLp8RcAjGG5ACcxUSdj5iVSZE4B",
+    "Gdh7gGcHFdLutmQRHL93HDUELCjb569Xg8Lmgs79iEAy"
   ]
 }
