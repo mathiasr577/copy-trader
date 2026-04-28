@@ -8,6 +8,10 @@ import paper_trader
 app = Flask(__name__, static_folder="static", static_url_path="")
 CORS(app)
 
+@app.route("/health")
+def health():
+    return "ok", 200
+
 processed_sigs = set()
 
 def trading_loop():
@@ -48,10 +52,10 @@ def get_portfolio():
     return jsonify(list(paper_trader.portfolio.values()))
 
 if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
     t1 = threading.Thread(target=tracker.run_loop, daemon=True)
     t2 = threading.Thread(target=trading_loop, daemon=True)
     t1.start()
     t2.start()
     print("[server] Dashboard iniciando...")
-    port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
