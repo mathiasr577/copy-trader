@@ -51,11 +51,14 @@ def get_paper():
 def get_portfolio():
     return jsonify(list(paper_trader.portfolio.values()))
 
+# Iniciar threads fuera del if __name__ para que funcione tanto con python directo como con gunicorn
+t1 = threading.Thread(target=tracker.run_loop, daemon=True)
+t2 = threading.Thread(target=trading_loop, daemon=True)
+t1.start()
+t2.start()
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    t1 = threading.Thread(target=tracker.run_loop, daemon=True)
-    t2 = threading.Thread(target=trading_loop, daemon=True)
-    t1.start()
-    t2.start()
     print("[server] Dashboard iniciando...")
     app.run(host="0.0.0.0", port=port, debug=False)
+    
