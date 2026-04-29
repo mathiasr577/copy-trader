@@ -1,4 +1,5 @@
 import json
+import os
 import time
 import requests
 from datetime import datetime
@@ -9,15 +10,34 @@ BIRDEYE_HEADERS = {
     "x-chain": "solana"
 }
 
-CAPITAL = 1000        # capital simulado en USD
-MAX_PER_TRADE = 0.05  # máximo 5% del capital por trade
-STOP_LOSS = 0.15      # salir si pierde 15%
-TAKE_PROFIT = 0.50    # salir si gana 50%
+CAPITAL = 1000
+MAX_PER_TRADE = 0.05
+STOP_LOSS = 0.15
+TAKE_PROFIT = 0.50
 
-portfolio = {}        # posiciones abiertas
-trade_history = []    # historial completo
+STATE_FILE = "paper_state.json"
+
+def load_state():
+    global portfolio, trade_history, current_capital
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r") as f:
+                data = json.load(f)
+            summary = data.get("summary", {})
+            current_capital = summary.get("capital_actual", CAPITAL)
+            trade_history = summary.get("historial", [])
+            # Reconstruir portfolio desde lista guardada
+            portfolio = {p["token"]: p for p in data.get("portfolio", [])}
+            print(f"[paper] Estado cargado: capital=${current_capital:.2f}, {len(portfolio)} posiciones abiertas, {len(trade_history)} trades")
+        except Exception as e:
+            print(f"[paper] Error cargando estado: {e}")
+
+portfolio = {}
+trade_history = []
 starting_capital = CAPITAL
 current_capital = CAPITAL
+
+load_state()
 
 def get_token_price(token_address):
     try:
@@ -100,7 +120,7 @@ def simulate_sell(swap):
     print(f"[paper] {icon} SELL simulado | {pos['token_short']} | PnL: ${pnl:.2f} ({pnl_pct:.1f}%)")
 
 def check_stop_take():
-    global portfolio
+    global portfolio, current_capital
     to_close = []
 
     for token, pos in portfolio.items():
@@ -133,7 +153,6 @@ def check_stop_take():
             "result": "WIN" if pnl > 0 else "LOSS"
         })
 
-        global current_capital
         current_capital += value
         del portfolio[token]
 
@@ -153,7 +172,7 @@ def get_summary():
         "losses": total_trades - wins,
         "win_rate": round(win_rate, 1),
         "posiciones_abiertas": len(portfolio),
-        "historial": trade_history[-20:]
+        "historial": trade_history
     }
 
 def process_trade(swap):
@@ -163,7 +182,7 @@ def process_trade(swap):
         simulate_sell(swap)
 
 def save_state():
-    with open("paper_state.json", "w") as f:
+    with open(STATE_FILE, "w") as f:
         json.dump({
             "summary": get_summary(),
             "portfolio": list(portfolio.values())
