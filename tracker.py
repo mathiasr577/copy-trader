@@ -1,10 +1,27 @@
 import time
+import json
+import os
 import requests
 from datetime import datetime
 from config import RPC_URL, WATCHLIST, POLL_INTERVAL
 from parser import parse_swap
 
-detected_trades = []
+TRADES_FILE = "trades_history.json"
+
+def load_trades():
+    if os.path.exists(TRADES_FILE):
+        try:
+            with open(TRADES_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def save_trades(trades):
+    with open(TRADES_FILE, "w") as f:
+        json.dump(trades, f)
+
+detected_trades = load_trades()
 last_seen = {}
 
 def rpc(method, params):
@@ -63,6 +80,7 @@ def process_wallet(wallet):
             detected_trades.insert(0, swap)
             if len(detected_trades) > 200:
                 detected_trades.pop()
+            save_trades(detected_trades)
             icon = "🟢" if swap["action"] == "BUY" else "🔴"
             print(f"{icon} {swap['action']} | {swap['wallet_short']} | {swap['token_short']} | {swap['amount']} | {ts}")
 
