@@ -11,15 +11,18 @@ BIRDEYE_HEADERS = {
 
 RPC_URL = f"https://mainnet.helius-rpc.com/?api-key={HELIUS_API_KEY}"
 
-# FILTROS — inspirados en los criterios de Birdeye
-MIN_PNL          = 10000    # $10k PnL mínimo
-MIN_TRADES       = 10       # mínimo 10 trades
-MIN_SOL          = 0.5      # mínimo 0.5 SOL de balance
-MIN_RECENT_DAYS  = 7        # activa en últimos 7 días
-MIN_AGE_DAYS     = 14       # wallet con al menos 14 días
-MAX_BOT_GAP      = 3        # gap promedio entre txs > 3s
-MIN_UNIQUE_TOKENS = 3       # al menos 3 tokens distintos
-MAX_WALLETS      = 50       # máximo acumulado
+# URL del server en Railway — el finder le notifica las wallets aprobadas
+SERVER_URL = "https://copy-trader-production-3ae0.up.railway.app"
+
+# FILTROS
+MIN_PNL           = 10000
+MIN_TRADES        = 10
+MIN_SOL           = 0.5
+MIN_RECENT_DAYS   = 7
+MIN_AGE_DAYS      = 14
+MAX_BOT_GAP       = 3
+MIN_UNIQUE_TOKENS = 3
+MAX_WALLETS       = 50
 
 STABLECOINS = {
     "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
@@ -37,7 +40,28 @@ def rpc(method, params):
     except Exception:
         return None
 
-# ─── FUENTE 1: Birdeye top traders ───────────────────────────
+# ─── NOTIFICAR AL SERVER ──────────────────────────────────────────────────────
+
+def notify_server(wallet_data):
+    """
+    Cuando el finder aprueba una wallet, la manda al server
+    para que aparezca en el dashboard en tiempo real.
+    """
+    try:
+        r = requests.post(
+            f"{SERVER_URL}/api/pending/add",
+            json=wallet_data,
+            timeout=10
+        )
+        result = r.json()
+        if result.get("ok"):
+            print(f"  📡 Notificada al dashboard ({result.get('pending_total')} en queue)")
+        else:
+            print(f"  📡 Ya en queue: {result.get('message')}")
+    except Exception as e:
+        print(f"  📡 No se pudo notificar al server: {e}")
+
+# ─── FUENTE 1: Birdeye top traders ───────────────────────────────────────────
 
 def get_birdeye_traders():
     print("\n[fuente 1] Birdeye top traders...")
@@ -55,7 +79,7 @@ def get_birdeye_traders():
         print(f"  → error: {e}")
         return []
 
-# ─── FUENTE 2: Tokens trending + early buyers ────────────────
+# ─── FUENTE 2: Tokens trending + early buyers ─────────────────────────────────
 
 def get_trending_tokens():
     try:
@@ -111,7 +135,7 @@ def get_trending_buyers():
     print(f"  → {len(all_buyers)} wallets encontradas")
     return all_buyers
 
-# ─── ANÁLISIS DE WALLET ──────────────────────────────────────
+# ─── ANÁLISIS DE WALLET ───────────────────────────────────────────────────────
 
 def analyze_wallet(address):
     now = datetime.datetime.now(datetime.timezone.utc).timestamp()
@@ -195,7 +219,6 @@ def analyze_wallet(address):
             elif delta < -0.001:
                 sells += 1
 
-        # PnL estimado via cambio de balance SOL
         pre_sol  = meta.get("preBalances", [0])[0] / 1e9
         post_sol = meta.get("postBalances", [0])[0] / 1e9
         estimated_pnl += (post_sol - pre_sol)
@@ -219,20 +242,21 @@ def analyze_wallet(address):
         "buys": buys,
         "sells": sells,
         "estimated_pnl_sol": round(estimated_pnl, 3),
-        "source": "birdeye+helius"
+        "found_at": datetime.datetime.utcnow().isoformat(),
+        "source": "honest_mercy"
     }, None
 
-# ─── MAIN ────────────────────────────────────────────────────
+# ─── MAIN ─────────────────────────────────────────────────────────────────────
 
 def run_finder():
     print("=" * 60)
-    print("[finder] Copy Trader — Wallet Finder Combinado")
-    print(f"  PnL mínimo:       ${MIN_PNL:,}")
-    print(f"  Trades mínimos:   {MIN_TRADES}")
-    print(f"  SOL mínimo:       {MIN_SOL}")
-    print(f"  Activa últimos:   {MIN_RECENT_DAYS} días")
-    print(f"  Antigüedad mín:   {MIN_AGE_DAYS} días")
-    print(f"  Tokens únicos:    {MIN_UNIQUE_TOKENS}+")
+    print("[finder] Honest Mercy — Wallet Finder")
+    print(f"  SOL mínimo:     {MIN_SOL}")
+    print(f"  Trades mínimos: {MIN_TRADES}")
+    print(f"  Activa últimos: {MIN_RECENT_DAYS} días")
+    print(f"  Antigüedad mín: {MIN_AGE_DAYS} días")
+    print(f"  Tokens únicos:  {MIN_UNIQUE_TOKENS}+")
+    print(f"  Server:         {SERVER_URL}")
     print("=" * 60)
 
     # Cargar existentes
@@ -242,11 +266,11 @@ def run_finder():
             data = json.load(f)
             for w in data.get("wallets", []):
                 existing[w["address"]] = w
-        print(f"[finder] {len(existing)} wallets existentes cargadas")
+        print(f"[finder] {len(existing)} wallets existentes")
     except Exception:
         print("[finder] Empezando desde cero")
 
-    # Juntar candidatas de ambas fuentes
+    # Juntar candidatas
     candidates = set()
     candidates.update(get_birdeye_traders())
     candidates.update(get_trending_buyers())
@@ -267,12 +291,14 @@ def run_finder():
             existing[address] = result
             new_count += 1
             print(f"  ✅ APROBADA | SOL: {result['sol_balance']} | TXs: {result['tx_count']} | Edad: {result['age_days']}d | Tokens: {result['unique_tokens']}")
+            # ← NUEVO: notificar al dashboard en tiempo real
+            notify_server(result)
         else:
             print(f"  ❌ {reason}")
 
         time.sleep(0.2)
 
-    # Guardar
+    # Guardar al JSON también (backup)
     all_wallets = list(existing.values())
     addresses = [w["address"] for w in all_wallets]
     with open("watchlist.json", "w") as f:
@@ -280,8 +306,6 @@ def run_finder():
 
     print(f"\n{'='*60}")
     print(f"[finder] +{new_count} nuevas | Total: {len(all_wallets)} wallets")
-    for w in all_wallets:
-        print(f"  {w['address']} | SOL: {w.get('sol_balance','?')} | Tokens: {w.get('unique_tokens','?')}")
 
     return addresses
 

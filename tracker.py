@@ -92,7 +92,7 @@ def run_loop():
     while True:
         cycle += 1
         print(f"[ciclo {cycle}] — {len(config.WATCHLIST)} wallets activas")
-        for wallet in list(config.WATCHLIST):  # list() para evitar errores si se modifica durante el ciclo
+        for wallet in list(config.WATCHLIST):  # list() para snapshot seguro del ciclo
             try:
                 process_wallet(wallet)
                 time.sleep(0.4)
