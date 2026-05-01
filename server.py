@@ -1,5 +1,6 @@
 import threading
 import os
+import requests
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import config
@@ -94,7 +95,6 @@ def remove_wallet():
 
 @app.route("/api/pending", methods=["GET"])
 def get_pending():
-    """El dashboard llama esto para ver wallets nuevas encontradas por el finder."""
     return jsonify({
         "wallets": config.PENDING_WALLETS,
         "total": len(config.PENDING_WALLETS)
@@ -102,10 +102,6 @@ def get_pending():
 
 @app.route("/api/pending/add", methods=["POST"])
 def add_pending():
-    """
-    Honest Mercy (wallet_finder.py) llama esto cuando aprueba una wallet.
-    Body: { address, sol_balance, tx_count, age_days, unique_tokens, estimated_pnl_sol, source }
-    """
     data = request.get_json()
     if not data:
         return jsonify({"ok": False, "error": "no body"}), 400
@@ -114,13 +110,108 @@ def add_pending():
 
 @app.route("/api/pending/dismiss", methods=["POST"])
 def dismiss_pending():
-    """Descarta una wallet de pending (usuario la rechazó en el dashboard)."""
     data = request.get_json()
     if not data:
         return jsonify({"ok": False, "error": "no body"}), 400
     address = data.get("address", "").strip()
     removed = config.dismiss_pending(address)
     return jsonify({"ok": removed, "pending_total": len(config.PENDING_WALLETS)})
+
+# ── Analyze proxy — evita CORS llamando a Birdeye desde el server ─────────────
+#
+#  El dashboard no puede llamar a Birdeye directamente (CORS).
+#  En cambio llama a este endpoint, que corre en Railway y sí puede.
+#
+#  GET /api/analyze?wallet=ADDRESS
+#  Devuelve: { address, winRate, totalTrades, prePumpBuyRate,
+#              avgHoldTimeHours, totalVolumeUSD, realizedPnl,
+#              consecutiveWins, topTokens, lastActive }
+
+@app.route("/api/analyze", methods=["GET"])
+def analyze_wallet():
+    address = request.args.get("wallet", "").strip()
+    if not address:
+        return jsonify({"ok": False, "error": "no wallet"}), 400
+
+    birdeye_key = config.BIRDEYE_API_KEY
+    headers = {"X-API-KEY": birdeye_key, "x-chain": "solana"}
+
+    try:
+        # Portfolio
+        portfolio_res = requests.get(
+            f"https://public-api.birdeye.so/v1/wallet/portfolio",
+            params={"wallet": address},
+            headers=headers,
+            timeout=20
+        )
+        portfolio_data = portfolio_res.json() if portfolio_res.ok else {}
+
+        # Trade history
+        trades_res = requests.get(
+            f"https://public-api.birdeye.so/v1/wallet/transaction_history",
+            params={"wallet": address, "limit": 100},
+            headers=headers,
+            timeout=20
+        )
+        trades_data = trades_res.json() if trades_res.ok else {}
+
+        trade_list = trades_data.get("data", {}).get("items", []) or []
+        total_trades = len(trade_list)
+        wins = 0
+        total_pnl = 0.0
+        total_vol = 0.0
+        pre_pump_buys = 0
+        hold_times = []
+        consecutive_wins = 0
+        current_streak = 0
+
+        for t in trade_list:
+            pnl = t.get("realizedPnl") or 0
+            total_pnl += pnl
+            total_vol += abs(t.get("volumeUSD") or 0)
+            if pnl > 0:
+                wins += 1
+                current_streak += 1
+                consecutive_wins = max(consecutive_wins, current_streak)
+            else:
+                current_streak = 0
+            buy_time = t.get("buyTime")
+            sell_time = t.get("sellTime")
+            if buy_time and sell_time:
+                hold_times.append((sell_time - buy_time) / 3600000)
+            buy_val = t.get("buyValueUSD") or 0
+            if pnl > 0 and buy_val and pnl / buy_val > 1:
+                pre_pump_buys += 1
+
+        avg_hold = (sum(hold_times) / len(hold_times)) if hold_times else 0
+        win_rate = (wins / total_trades) if total_trades > 0 else 0
+        pre_pump_rate = (pre_pump_buys / total_trades) if total_trades > 0 else 0
+
+        top_tokens = [
+            t.get("symbol", "???")
+            for t in (portfolio_data.get("data", {}).get("items", []) or [])[:5]
+        ]
+
+        import time as t_mod
+        last_active = trade_list[0].get("blockTime", t_mod.time() * 1000) if trade_list else t_mod.time() * 1000
+
+        return jsonify({
+            "ok": True,
+            "address": address,
+            "winRate": win_rate,
+            "totalTrades": total_trades,
+            "prePumpBuyRate": pre_pump_rate,
+            "avgHoldTimeHours": avg_hold,
+            "totalVolumeUSD": total_vol,
+            "realizedPnl": total_pnl,
+            "consecutiveWins": consecutive_wins,
+            "topTokens": top_tokens,
+            "lastActive": last_active,
+            "chain": "SOL"
+        })
+
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 # ── Threads ───────────────────────────────────────────────────────────────────
 
