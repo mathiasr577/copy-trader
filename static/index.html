@@ -5,10 +5,10 @@
 <title>Copy Trader</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: monospace; background: #0d0d0f; color: #e0e0e0; padding: 20px; }
+  body { font-family: monospace; background: #0a0a0c; color: #e0e0e0; padding: 20px; }
   h1 { font-size: 18px; color: #fff; margin-bottom: 4px; }
-  .sub { font-size: 12px; color: #555; margin-bottom: 20px; }
-  .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+  .sub { font-size: 12px; color: #555; margin-bottom: 16px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
   .tab { padding: 6px 16px; border-radius: 6px; font-size: 12px; cursor: pointer; background: #1a1a1f; border: 1px solid #2a2a30; color: #888; }
   .tab.active { background: #22c55e22; border-color: #22c55e55; color: #22c55e; }
   .page { display: none; }
@@ -55,16 +55,96 @@
   .loss { color: #ef4444; font-weight: bold; }
   .pos-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #1a1a20; font-size: 12px; }
   .pos-row:last-child { border-bottom: none; }
-
   .status-bar { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #555; margin-bottom: 16px; }
   .pulse { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; animation: pulse 2s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
   .empty { color: #333; font-size: 13px; padding: 24px; text-align: center; }
+
+  /* WALLET INTELLIGENCE */
+  .wi-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+  .wi-stats { display: flex; gap: 20px; }
+  .wi-stat { text-align: center; }
+  .wi-stat .v { font-size: 18px; font-weight: bold; }
+  .wi-stat .l { font-size: 9px; color: #555; text-transform: uppercase; letter-spacing: 0.06em; }
+  .wi-input-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .wi-input-row input, .wi-input-row textarea { background: #111; border: 1px solid #222; border-radius: 6px; padding: 8px 12px; color: #ccc; font-family: monospace; font-size: 12px; }
+  .wi-input-row input { flex: 1; min-width: 280px; }
+  .btn-green { background: #22c55e22; border: 1px solid #22c55e44; color: #22c55e; border-radius: 6px; padding: 8px 16px; font-size: 11px; font-weight: bold; cursor: pointer; font-family: monospace; }
+  .btn-gray { background: #111; border: 1px solid #222; color: #888; border-radius: 6px; padding: 8px 14px; font-size: 11px; cursor: pointer; font-family: monospace; }
+  .btn-green:hover { background: #22c55e33; }
+  .btn-gray:hover { background: #1a1a1a; }
+
+  /* SCORE RING */
+  .score-ring-wrap { position: relative; width: 48px; height: 48px; flex-shrink: 0; }
+  .score-ring-wrap svg { transform: rotate(-90deg); }
+  .score-num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; }
+
+  /* WALLET CARD */
+  .wcard { display: grid; grid-template-columns: 28px 52px 1fr auto; gap: 10px; align-items: center; padding: 10px 14px; background: #111; border-radius: 8px; border: 1px solid #1a1a1a; margin-bottom: 6px; }
+  .wcard.elite { background: #001a0f88; border-color: #22c55e22; }
+  .wcard.strong { background: #00182688; border-color: #4fc3f722; }
+  .wcard .rank { font-size: 11px; color: #444; font-weight: bold; text-align: center; }
+  .wcard .info { display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
+  .wcard .addr-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .wcard .addr { font-size: 12px; color: #ccc; }
+  .tier-badge { font-size: 9px; padding: 2px 6px; border-radius: 3px; font-weight: bold; letter-spacing: 0.05em; }
+  .pills { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 2px; }
+  .pill { background: #0d0d0d; border: 1px solid #1a1a1a; border-radius: 5px; padding: 4px 8px; font-size: 10px; display: flex; flex-direction: column; gap: 1px; min-width: 60px; }
+  .pill .pl { font-size: 8px; color: #444; text-transform: uppercase; letter-spacing: 0.06em; }
+  .pill .pv { font-size: 11px; font-weight: bold; }
+  .wcard .actions { display: flex; gap: 5px; }
+  .copy-btn { background: #22c55e22; border: 1px solid #22c55e44; color: #22c55e; border-radius: 5px; padding: 3px 9px; font-size: 10px; font-weight: bold; cursor: pointer; }
+  .copy-btn:hover { background: #22c55e33; }
+  .rem-btn { background: transparent; border: 1px solid #222; color: #444; border-radius: 5px; padding: 3px 7px; font-size: 10px; cursor: pointer; }
+  .rem-btn:hover { color: #888; }
+  .copy-btn.copied { background: #14532d; border-color: #22c55e; }
+
+  /* SORT/FILTER BAR */
+  .filter-bar { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+  .filter-bar span { font-size: 9px; color: #444; text-transform: uppercase; letter-spacing: 0.06em; }
+  .fbtn { background: #0c0c0c; border: 1px solid #1a1a1a; color: #555; border-radius: 4px; padding: 3px 8px; font-size: 9px; cursor: pointer; font-family: monospace; }
+  .fbtn.active { background: #22c55e22; border-color: #22c55e44; color: #22c55e; }
+
+  /* PENDING */
+  .pending-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #0a0f0a; border: 1px solid #22c55e22; border-radius: 8px; margin-bottom: 6px; }
+  .pending-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; flex-shrink: 0; }
+  .pending-info { flex: 1; }
+  .pending-addr { font-size: 12px; color: #ccc; margin-bottom: 4px; }
+  .pending-pills { display: flex; gap: 5px; flex-wrap: wrap; }
+  .ppill { background: #111; border-radius: 4px; padding: 2px 7px; font-size: 10px; color: #888; }
+  .pending-actions { display: flex; gap: 5px; }
+
+  /* TOAST */
+  #toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; pointer-events: none; }
+  .toast { padding: 10px 16px; border-radius: 8px; font-size: 11px; font-weight: bold; font-family: monospace; max-width: 380px; }
+  .toast.success { background: #001a0f; border: 1px solid #22c55e66; color: #22c55e; }
+  .toast.warn { background: #1a1200; border: 1px solid #fbbf2466; color: #fbbf24; }
+  .toast.error { background: #1a0000; border: 1px solid #ef444466; color: #ef4444; }
+
+  /* WI TABS */
+  .wi-tabs { display: flex; gap: 0; border-bottom: 1px solid #1a1a1a; margin-bottom: 16px; }
+  .wi-tab { background: transparent; border: none; border-bottom: 2px solid transparent; color: #555; padding: 9px 16px; font-size: 10px; font-weight: bold; cursor: pointer; font-family: monospace; letter-spacing: 0.06em; text-transform: uppercase; }
+  .wi-tab.active { border-bottom-color: #22c55e; color: #22c55e; }
+
+  /* ANALYTICS */
+  .analytics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .dist-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .dist-bar .dl { font-size: 9px; width: 38px; text-align: right; }
+  .dist-bar .dt { flex: 1; background: #111; border-radius: 2px; height: 14px; overflow: hidden; }
+  .dist-bar .df { height: 100%; border-right: 2px solid; transition: width 0.5s ease; }
+  .dist-bar .dc { font-size: 10px; font-weight: bold; width: 18px; text-align: right; }
+  .summary-row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #111; }
+  .summary-row:last-child { border-bottom: none; }
+  .loading-spin { display: inline-block; animation: spin 1s linear infinite; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
+
+<div id="toast-container"></div>
+
 <h1>Copy Trader — Solana</h1>
-<p class="sub">Sistema de paper trading en tiempo real</p>
+<p class="sub">Sistema de paper trading + wallet intelligence en tiempo real</p>
 
 <div class="status-bar">
   <div class="pulse"></div>
@@ -74,6 +154,8 @@
 <div class="tabs">
   <div class="tab active" onclick="showTab('trades')">Trades en vivo</div>
   <div class="tab" onclick="showTab('paper')">Paper Trading</div>
+  <div class="tab" onclick="showTab('intelligence')">◎ Wallet Intelligence</div>
+  <div class="tab" onclick="showTab('pending')" id="tab-pending">🔍 Honest Mercy</div>
 </div>
 
 <!-- PÁGINA TRADES -->
@@ -96,24 +178,11 @@
 <!-- PÁGINA PAPER TRADING -->
 <div class="page" id="page-paper">
   <div class="stats">
-    <div class="stat">
-      <div class="label">Capital actual</div>
-      <div class="value white" id="capital">$1,000</div>
-    </div>
-    <div class="stat">
-      <div class="label">PnL total</div>
-      <div class="value" id="pnl">$0</div>
-    </div>
-    <div class="stat">
-      <div class="label">Win rate</div>
-      <div class="value yellow" id="winrate">0%</div>
-    </div>
-    <div class="stat">
-      <div class="label">Trades totales</div>
-      <div class="value white" id="trades-total">0</div>
-    </div>
+    <div class="stat"><div class="label">Capital actual</div><div class="value white" id="capital">$1,000</div></div>
+    <div class="stat"><div class="label">PnL total</div><div class="value" id="pnl">$0</div></div>
+    <div class="stat"><div class="label">Win rate</div><div class="value yellow" id="winrate">0%</div></div>
+    <div class="stat"><div class="label">Trades totales</div><div class="value white" id="trades-total">0</div></div>
   </div>
-
   <div class="paper-grid">
     <div class="panel">
       <h2>Posiciones abiertas</h2>
@@ -129,13 +198,454 @@
   </div>
 </div>
 
+<!-- PÁGINA WALLET INTELLIGENCE -->
+<div class="page" id="page-intelligence">
+  <div class="wi-header">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="font-size:13px;font-weight:bold;color:#fff;">Wallet Intelligence</div>
+      <div style="font-size:9px;color:#444;letter-spacing:0.08em;">ALPHA SCORING ENGINE v2</div>
+    </div>
+    <div class="wi-stats">
+      <div class="wi-stat"><div class="v" id="wi-total" style="color:#ccc">0</div><div class="l">Wallets</div></div>
+      <div class="wi-stat"><div class="v" id="wi-analyzed" style="color:#888">0</div><div class="l">Analyzed</div></div>
+      <div class="wi-stat"><div class="v" id="wi-elite" style="color:#22c55e">0</div><div class="l">Elite</div></div>
+      <div class="wi-stat"><div class="v" id="wi-avg" style="color:#4fc3f7">—</div><div class="l">Avg Score</div></div>
+      <div class="wi-stat"><div class="v" id="wi-copied" style="color:#fbbf24">0</div><div class="l">Copied</div></div>
+    </div>
+  </div>
+
+  <div class="wi-tabs">
+    <button class="wi-tab active" onclick="wiTab('tracker')">◎ Tracker</button>
+    <button class="wi-tab" onclick="wiTab('analytics')" id="wi-tab-analytics">⬡ Analytics</button>
+  </div>
+
+  <div id="wi-tracker">
+    <div class="wi-input-row">
+      <input id="wi-addr" type="text" placeholder="Pega wallet address (Solana)..." onkeydown="if(event.key==='Enter')wiAddWallet()" />
+      <button class="btn-green" onclick="wiAddWallet()">+ ADD</button>
+      <button class="btn-gray" onclick="toggleBulk()">BULK ADD</button>
+    </div>
+    <div id="bulk-area" style="display:none;margin-bottom:12px;">
+      <textarea id="bulk-input" rows="4" style="width:100%;resize:vertical;" placeholder="Pega hasta 1000 wallets, una por línea..."></textarea>
+      <div style="display:flex;gap:8px;margin-top:6px;">
+        <button class="btn-green" onclick="bulkAdd()">ANALYZE ALL</button>
+        <span id="bulk-count" style="font-size:10px;color:#555;align-self:center;">0 detected</span>
+      </div>
+    </div>
+
+    <div class="filter-bar" id="filter-bar" style="display:none;">
+      <span>SORT:</span>
+      <button class="fbtn active" onclick="wiSetSort('score')" id="s-score">Score</button>
+      <button class="fbtn" onclick="wiSetSort('pnl')" id="s-pnl">PnL</button>
+      <button class="fbtn" onclick="wiSetSort('winrate')" id="s-winrate">Win %</button>
+      <button class="fbtn" onclick="wiSetSort('prepump')" id="s-prepump">Pre-Pump</button>
+      <span style="margin-left:8px;">TIER:</span>
+      <button class="fbtn active" onclick="wiSetTier('ALL')" id="t-ALL">All</button>
+      <button class="fbtn" onclick="wiSetTier('ELITE')" id="t-ELITE" style="color:#22c55e;">Elite</button>
+      <button class="fbtn" onclick="wiSetTier('STRONG')" id="t-STRONG" style="color:#4fc3f7;">Strong</button>
+      <button class="fbtn" onclick="wiSetTier('DECENT')" id="t-DECENT" style="color:#fbbf24;">Decent</button>
+      <button class="fbtn" onclick="wiSetTier('WEAK')" id="t-WEAK" style="color:#f97316;">Weak</button>
+    </div>
+
+    <div id="wi-list"></div>
+    <div id="wi-empty" style="text-align:center;padding:50px 0;color:#333;font-size:13px;">
+      <div style="font-size:32px;margin-bottom:10px;">◎</div>
+      Agrega una wallet para analizarla con datos reales de Birdeye.
+    </div>
+
+    <div id="wi-copy-list" style="display:none;margin-top:16px;padding:12px;background:#001a0f;border-radius:8px;border:1px solid #22c55e22;">
+      <div style="font-size:10px;color:#22c55e;font-weight:bold;margin-bottom:6px;letter-spacing:0.06em;">✓ COPY LIST</div>
+      <div id="wi-copy-items" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+    </div>
+  </div>
+
+  <div id="wi-analytics" style="display:none;">
+    <div class="analytics-grid">
+      <div class="panel">
+        <h2>Score Distribution</h2>
+        <div id="dist-chart"></div>
+      </div>
+      <div class="panel">
+        <h2>Fleet Summary</h2>
+        <div id="fleet-summary"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PÁGINA HONEST MERCY -->
+<div class="page" id="page-pending">
+  <div class="panel">
+    <h2>Wallets encontradas por Honest Mercy</h2>
+    <div id="pending-list">
+      <div class="empty">
+        <div style="font-size:28px;margin-bottom:10px;">🔍</div>
+        Honest Mercy no ha encontrado wallets nuevas aún.<br>
+        <span style="font-size:11px;color:#222;">Corre cada 15 min y manda wallets aprobadas aquí automáticamente.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
-function showTab(name) {
-  document.querySelectorAll('.tab').forEach((t, i) => {
-    t.classList.toggle('active', ['trades','paper'][i] === name);
+// ─── SCORING ENGINE ───────────────────────────────────────────────────────────
+function computeScore(w) {
+  if (!w.analyzed) return null;
+  const winS = Math.min(w.winRate * 100, 100);
+  const conS = Math.min((w.consecutiveWins / Math.max(w.totalTrades, 1)) * 200, 100);
+  const ppS = Math.min(w.prePumpBuyRate * 100, 100);
+  const h = w.avgHoldTimeHours;
+  const holdS = h < 0.25 ? 20 : h < 1 ? 50 : h <= 48 ? 100 - Math.abs(h - 12) * 1.5 : Math.max(0, 100 - (h - 48) * 0.8);
+  const volS = Math.min((w.totalVolumeUSD / 10000) * 100, 100);
+  return Math.round(Math.min(Math.max(winS*0.30 + conS*0.25 + ppS*0.25 + holdS*0.10 + volS*0.10, 0), 100));
+}
+
+function getTier(s) {
+  if (s === null) return { label:'—', color:'#555' };
+  if (s >= 80) return { label:'ELITE', color:'#22c55e' };
+  if (s >= 65) return { label:'STRONG', color:'#4fc3f7' };
+  if (s >= 50) return { label:'DECENT', color:'#fbbf24' };
+  if (s >= 35) return { label:'WEAK', color:'#f97316' };
+  return { label:'SKIP', color:'#ef4444' };
+}
+
+function fmtUSD(v) { return new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(v||0); }
+function fmtPct(v) { return ((v||0)*100).toFixed(1)+'%'; }
+function fmtTime(h) { if(!h) return '—'; if(h<1) return Math.round(h*60)+'m'; if(h<24) return h.toFixed(1)+'h'; return (h/24).toFixed(1)+'d'; }
+function fmtAddr(a) { return a ? a.slice(0,6)+'...'+a.slice(-4) : '—'; }
+
+// ─── SCORE RING SVG ───────────────────────────────────────────────────────────
+function scoreRingSVG(score) {
+  const tier = getTier(score);
+  const r = 20, circ = 2 * Math.PI * r;
+  const fill = score !== null ? (score/100) * circ : 0;
+  return `<div class="score-ring-wrap">
+    <svg width="48" height="48" viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="${r}" fill="none" stroke="#1e1e1e" stroke-width="6"/>
+      <circle cx="24" cy="24" r="${r}" fill="none" stroke="${tier.color}" stroke-width="6"
+        stroke-dasharray="${fill} ${circ}" stroke-linecap="round"
+        style="transition:stroke-dasharray 0.6s ease;transform:rotate(-90deg);transform-origin:center"/>
+    </svg>
+    <div class="score-num" style="color:${tier.color}">${score !== null ? score : '—'}</div>
+  </div>`;
+}
+
+// ─── WALLET STATE ─────────────────────────────────────────────────────────────
+let wiWallets = [];
+let wiCopied = new Set();
+let wiSort = 'score';
+let wiTier = 'ALL';
+let wiQueue = [];
+let wiAnalyzing = false;
+
+// Load from localStorage
+try {
+  const saved = localStorage.getItem('wi-wallets');
+  if (saved) wiWallets = JSON.parse(saved).map(w => ({...w, loading:false}));
+  const sc = localStorage.getItem('wi-copied');
+  if (sc) wiCopied = new Set(JSON.parse(sc));
+} catch(e) {}
+
+function wiSave() {
+  try {
+    localStorage.setItem('wi-wallets', JSON.stringify(wiWallets.filter(w=>w.analyzed)));
+    localStorage.setItem('wi-copied', JSON.stringify([...wiCopied]));
+  } catch(e) {}
+}
+
+// ─── TOAST ────────────────────────────────────────────────────────────────────
+function toast(msg, type='success') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// ─── ANALYZE VIA PROXY ───────────────────────────────────────────────────────
+async function analyzeWallet(address) {
+  const res = await fetch('/api/analyze?wallet=' + encodeURIComponent(address));
+  if (!res.ok) throw new Error('Proxy error ' + res.status);
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'analyze failed');
+  const w = {
+    address, analyzed: true,
+    winRate: data.winRate||0, totalTrades: data.totalTrades||0,
+    prePumpBuyRate: data.prePumpBuyRate||0, avgHoldTimeHours: data.avgHoldTimeHours||0,
+    totalVolumeUSD: data.totalVolumeUSD||0, realizedPnl: data.realizedPnl||0,
+    consecutiveWins: data.consecutiveWins||0, lastActive: data.lastActive||Date.now(),
+    topTokens: data.topTokens||[], chain: data.chain||'SOL', loading: false, error: null
+  };
+  w.score = computeScore(w);
+  return w;
+}
+
+// ─── QUEUE PROCESSOR ─────────────────────────────────────────────────────────
+async function processQueue() {
+  if (wiAnalyzing) return;
+  wiAnalyzing = true;
+  while (wiQueue.length > 0) {
+    const addr = wiQueue.shift();
+    try {
+      const data = await analyzeWallet(addr);
+      wiWallets = wiWallets.map(w => w.address === addr ? data : w);
+    } catch(e) {
+      wiWallets = wiWallets.map(w => w.address === addr ? {...w, loading:false, error:e.message} : w);
+    }
+    wiSave();
+    wiRender();
+    await new Promise(r => setTimeout(r, 400));
+  }
+  wiAnalyzing = false;
+}
+
+function wiAddWallet(address) {
+  const addr = (address || document.getElementById('wi-addr').value).trim();
+  if (!addr) return;
+  if (wiWallets.find(w => w.address === addr)) { toast('Wallet ya existe', 'warn'); return; }
+  wiWallets.push({ address:addr, analyzed:false, loading:true, score:null, error:null });
+  if (!address) document.getElementById('wi-addr').value = '';
+  wiQueue.push(addr);
+  processQueue();
+  wiRender();
+}
+
+function bulkAdd() {
+  const lines = document.getElementById('bulk-input').value.split(/[\n,\s]+/).map(a=>a.trim()).filter(Boolean);
+  lines.forEach(a => {
+    if (!wiWallets.find(w=>w.address===a)) {
+      wiWallets.push({address:a,analyzed:false,loading:true,score:null,error:null});
+      wiQueue.push(a);
+    }
   });
+  document.getElementById('bulk-input').value = '';
+  document.getElementById('bulk-area').style.display = 'none';
+  processQueue();
+  wiRender();
+}
+
+function toggleBulk() {
+  const el = document.getElementById('bulk-area');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function wiRemove(address) {
+  wiWallets = wiWallets.filter(w => w.address !== address);
+  wiSave();
+  wiRender();
+}
+
+async function wiCopy(address) {
+  wiCopied.add(address);
+  wiSave();
+  wiRender();
+  try {
+    const res = await fetch('/api/watchlist/copy?wallet=' + encodeURIComponent(address));
+    const data = await res.json();
+    if (data.ok) toast('✓ ' + fmtAddr(address) + ' agregada al tracker (' + data.total + ' total)', 'success');
+    else if (data.message === 'already exists') toast('⚠ ' + fmtAddr(address) + ' ya está en el tracker', 'warn');
+    else toast('✗ Error: ' + data.message, 'error');
+  } catch(e) {
+    toast('✗ Error al conectar con el tracker', 'error');
+  }
+}
+
+function wiSetSort(s) {
+  wiSort = s;
+  document.querySelectorAll('[id^="s-"]').forEach(b => b.classList.remove('active'));
+  document.getElementById('s-'+s).classList.add('active');
+  wiRender();
+}
+
+function wiSetTier(t) {
+  wiTier = t;
+  document.querySelectorAll('[id^="t-"]').forEach(b => b.classList.remove('active'));
+  document.getElementById('t-'+t).classList.add('active');
+  wiRender();
+}
+
+function wiTab(t) {
+  document.querySelectorAll('.wi-tab').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('wi-tracker').style.display = t === 'tracker' ? 'block' : 'none';
+  document.getElementById('wi-analytics').style.display = t === 'analytics' ? 'block' : 'none';
+  if (t === 'analytics') renderAnalytics();
+}
+
+// ─── RENDER ───────────────────────────────────────────────────────────────────
+function wiRender() {
+  const analyzed = wiWallets.filter(w=>w.analyzed);
+  const elites = analyzed.filter(w=>(w.score||0)>=80);
+  const avgScore = analyzed.length ? Math.round(analyzed.reduce((s,w)=>s+(w.score||0),0)/analyzed.length) : null;
+
+  document.getElementById('wi-total').textContent = wiWallets.length;
+  document.getElementById('wi-analyzed').textContent = analyzed.length;
+  document.getElementById('wi-elite').textContent = elites.length;
+  document.getElementById('wi-avg').textContent = avgScore !== null ? avgScore : '—';
+  document.getElementById('wi-copied').textContent = wiCopied.size;
+
+  if (wiWallets.length > 0) {
+    document.getElementById('filter-bar').style.display = 'flex';
+    document.getElementById('wi-empty').style.display = 'none';
+  } else {
+    document.getElementById('filter-bar').style.display = 'none';
+    document.getElementById('wi-empty').style.display = 'block';
+  }
+
+  let sorted = [...wiWallets]
+    .filter(w => wiTier === 'ALL' || getTier(w.score).label === wiTier)
+    .sort((a,b) => {
+      if (wiSort === 'score') return (b.score||0)-(a.score||0);
+      if (wiSort === 'pnl') return (b.realizedPnl||0)-(a.realizedPnl||0);
+      if (wiSort === 'winrate') return (b.winRate||0)-(a.winRate||0);
+      return (b.prePumpBuyRate||0)-(a.prePumpBuyRate||0);
+    });
+
+  document.getElementById('wi-list').innerHTML = sorted.map((w, i) => {
+    const tier = getTier(w.score);
+    const isCopied = wiCopied.has(w.address);
+    const cls = w.score>=80?'elite':w.score>=65?'strong':'';
+    return `<div class="wcard ${cls}">
+      <span class="rank">${w.loading?'<span class="loading-spin">⟳</span>':`#${i+1}`}</span>
+      ${scoreRingSVG(w.loading?null:w.score)}
+      <div class="info">
+        <div class="addr-row">
+          <span class="addr">◎ ${fmtAddr(w.address)}</span>
+          <span class="tier-badge" style="background:${tier.color}22;color:${tier.color}">${w.loading?'…':tier.label}</span>
+          ${w.lastActive?`<span style="font-size:9px;color:#444">${timeAgo(w.lastActive)}</span>`:''}
+        </div>
+        ${w.loading?'<div style="font-size:11px;color:#555">Analizando wallet…</div>':''}
+        ${w.error?`<div style="font-size:11px;color:#ef4444">Error: ${w.error}</div>`:''}
+        ${w.analyzed && !w.loading?`<div class="pills">
+          <div class="pill"><span class="pl">Win Rate</span><span class="pv" style="color:${w.winRate>0.6?'#22c55e':w.winRate>0.45?'#fbbf24':'#ef4444'}">${fmtPct(w.winRate)}</span></div>
+          <div class="pill"><span class="pl">PnL</span><span class="pv" style="color:${w.realizedPnl>=0?'#22c55e':'#ef4444'}">${fmtUSD(w.realizedPnl)}</span></div>
+          <div class="pill"><span class="pl">Trades</span><span class="pv" style="color:#aaa">${w.totalTrades}</span></div>
+          <div class="pill"><span class="pl">Avg Hold</span><span class="pv" style="color:#4fc3f7">${fmtTime(w.avgHoldTimeHours)}</span></div>
+          <div class="pill"><span class="pl">Pre-Pump</span><span class="pv" style="color:${w.prePumpBuyRate>0.4?'#f97316':'#555'}">${fmtPct(w.prePumpBuyRate)}</span></div>
+          <div class="pill"><span class="pl">Volume</span><span class="pv" style="color:#888">${fmtUSD(w.totalVolumeUSD)}</span></div>
+        </div>
+        ${w.topTokens?.length?`<div style="display:flex;gap:4px;margin-top:3px;">${w.topTokens.map(t=>`<span style="font-size:9px;padding:1px 5px;background:#0d0d0d;border:1px solid #1a1a1a;border-radius:3px;color:#555">${t}</span>`).join('')}</div>`:''}
+        `:''}
+      </div>
+      <div class="actions">
+        ${(w.score||0)>=50?`<button class="copy-btn${isCopied?' copied':''}" onclick="wiCopy('${w.address}')">${isCopied?'✓ COPIED':'COPY'}</button>`:''}
+        <button class="rem-btn" onclick="wiRemove('${w.address}')">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Copy list
+  if (wiCopied.size > 0) {
+    document.getElementById('wi-copy-list').style.display = 'block';
+    document.getElementById('wi-copy-items').innerHTML = [...wiCopied].map(a =>
+      `<span style="font-size:10px;padding:2px 7px;border-radius:3px;background:#22c55e11;color:#22c55e88;font-family:monospace">${fmtAddr(a)}</span>`
+    ).join('');
+  } else {
+    document.getElementById('wi-copy-list').style.display = 'none';
+  }
+}
+
+function renderAnalytics() {
+  const analyzed = wiWallets.filter(w=>w.analyzed);
+  const dist = [
+    {label:'80–100',count:analyzed.filter(w=>(w.score||0)>=80).length,color:'#22c55e'},
+    {label:'65–79',count:analyzed.filter(w=>(w.score||0)>=65&&(w.score||0)<80).length,color:'#4fc3f7'},
+    {label:'50–64',count:analyzed.filter(w=>(w.score||0)>=50&&(w.score||0)<65).length,color:'#fbbf24'},
+    {label:'35–49',count:analyzed.filter(w=>(w.score||0)>=35&&(w.score||0)<50).length,color:'#f97316'},
+    {label:'0–34',count:analyzed.filter(w=>(w.score||0)<35).length,color:'#ef4444'},
+  ];
+  const maxD = Math.max(...dist.map(d=>d.count),1);
+  document.getElementById('dist-chart').innerHTML = dist.map(d=>`
+    <div class="dist-bar">
+      <span class="dl" style="color:${d.color}">${d.label}</span>
+      <div class="dt"><div class="df" style="width:${(d.count/maxD)*100}%;background:${d.color}44;border-color:${d.color}"></div></div>
+      <span class="dc" style="color:${d.color}">${d.count}</span>
+    </div>`).join('');
+
+  const totalPnl = analyzed.reduce((s,w)=>s+(w.realizedPnl||0),0);
+  const avgWR = analyzed.length ? analyzed.reduce((s,w)=>s+(w.winRate||0),0)/analyzed.length : 0;
+  const avgPP = analyzed.length ? analyzed.reduce((s,w)=>s+(w.prePumpBuyRate||0),0)/analyzed.length : 0;
+  document.getElementById('fleet-summary').innerHTML = [
+    {l:'Total PnL',v:fmtUSD(totalPnl),c:totalPnl>=0?'#22c55e':'#ef4444'},
+    {l:'Avg win rate',v:analyzed.length?fmtPct(avgWR):'—',c:'#4fc3f7'},
+    {l:'Avg pre-pump',v:analyzed.length?fmtPct(avgPP):'—',c:'#f97316'},
+    {l:'Elite (80+)',v:analyzed.filter(w=>(w.score||0)>=80).length,c:'#22c55e'},
+    {l:'Copiadas',v:wiCopied.size,c:'#fbbf24'},
+    {l:'Total volume',v:fmtUSD(analyzed.reduce((s,w)=>s+(w.totalVolumeUSD||0),0)),c:'#888'},
+  ].map(m=>`<div class="summary-row"><span style="font-size:10px;color:#555">${m.l}</span><span style="font-size:12px;font-weight:bold;color:${m.c}">${m.v}</span></div>`).join('');
+}
+
+function timeAgo(ts) {
+  const d = (Date.now() - ts) / 1000;
+  if (d < 3600) return Math.round(d/60)+'m ago';
+  if (d < 86400) return Math.round(d/3600)+'h ago';
+  return Math.round(d/86400)+'d ago';
+}
+
+// ─── PENDING (HONEST MERCY) ───────────────────────────────────────────────────
+async function fetchPending() {
+  try {
+    const res = await fetch('/api/pending');
+    const data = await res.json();
+    const wallets = data.wallets || [];
+    const tab = document.getElementById('tab-pending');
+    tab.textContent = '🔍 Honest Mercy' + (wallets.length > 0 ? ` (${wallets.length})` : '');
+
+    if (!wallets.length) {
+      document.getElementById('pending-list').innerHTML = `<div class="empty">
+        <div style="font-size:28px;margin-bottom:10px;">🔍</div>
+        Honest Mercy no ha encontrado wallets nuevas aún.<br>
+        <span style="font-size:11px;color:#222;">Corre cada 15 min y manda wallets aprobadas aquí automáticamente.</span>
+      </div>`;
+      return;
+    }
+
+    document.getElementById('pending-list').innerHTML = wallets.map(w => `
+      <div class="pending-card" id="pc-${w.address}">
+        <div class="pending-dot"></div>
+        <div class="pending-info">
+          <div class="pending-addr">◎ ${fmtAddr(w.address)} <span style="font-size:9px;padding:2px 6px;background:#001a0f;color:#22c55e;border-radius:3px;font-weight:bold">HONEST MERCY</span> ${w.found_at?`<span style="font-size:9px;color:#444">${new Date(w.found_at).toLocaleTimeString()}</span>`:''}</div>
+          <div class="pending-pills">
+            ${w.sol_balance!==undefined?`<span class="ppill" style="color:#4fc3f7">◎ ${w.sol_balance} SOL</span>`:''}
+            ${w.tx_count!==undefined?`<span class="ppill">${w.tx_count} txs</span>`:''}
+            ${w.unique_tokens!==undefined?`<span class="ppill">${w.unique_tokens} tokens</span>`:''}
+            ${w.age_days!==undefined?`<span class="ppill">${w.age_days}d antigüedad</span>`:''}
+            ${w.estimated_pnl_sol!==undefined?`<span class="ppill" style="color:${w.estimated_pnl_sol>=0?'#22c55e':'#ef4444'}">${w.estimated_pnl_sol>=0?'+':''}${w.estimated_pnl_sol} SOL</span>`:''}
+            ${w.buys!==undefined?`<span class="ppill">${w.buys}B / ${w.sells}S</span>`:''}
+          </div>
+        </div>
+        <div class="pending-actions">
+          <button class="copy-btn" onclick="pendingCopy('${w.address}')">✓ COPIAR</button>
+          <button class="rem-btn" onclick="pendingDismiss('${w.address}')">✕</button>
+        </div>
+      </div>`).join('');
+  } catch(e) {}
+}
+
+async function pendingCopy(address) {
+  try {
+    const res = await fetch('/api/watchlist/copy?wallet=' + encodeURIComponent(address));
+    const data = await res.json();
+    if (data.ok) toast('✓ ' + fmtAddr(address) + ' agregada al tracker', 'success');
+    else toast('⚠ ' + (data.message||'error'), 'warn');
+    pendingDismiss(address);
+  } catch(e) { toast('✗ Error al conectar', 'error'); }
+}
+
+async function pendingDismiss(address) {
+  try { await fetch('/api/pending/dismiss?wallet=' + encodeURIComponent(address)); } catch(e) {}
+  const el = document.getElementById('pc-'+address);
+  if (el) el.remove();
+}
+
+// ─── ORIGINAL FUNCTIONS ───────────────────────────────────────────────────────
+function showTab(name) {
+  const names = ['trades','paper','intelligence','pending'];
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', names[i]===name));
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById('page-' + name).classList.add('active');
+  document.getElementById('page-'+name).classList.add('active');
+  if (name === 'intelligence') wiRender();
+  if (name === 'pending') fetchPending();
 }
 
 async function fetchWallets() {
@@ -146,7 +656,7 @@ async function fetchWallets() {
       <div class="wallet-row">
         <div class="dot"></div>
         <span style="color:#aaa">${w.short}</span>
-        <span style="color:#333;font-size:11px;margin-left:auto">active</span>
+        <span style="color:#${w.status==='active'?'22c55e':'555'};font-size:11px;margin-left:auto">${w.status}</span>
       </div>`).join('');
   } catch(e) {}
 }
@@ -173,23 +683,21 @@ async function fetchPaper() {
   try {
     const r = await fetch('/api/paper');
     const d = await r.json();
-
     const pnl = d.pnl_total || 0;
-    document.getElementById('capital').textContent = '$' + (d.capital_actual || 0).toLocaleString();
-    document.getElementById('pnl').textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
-    document.getElementById('pnl').className = 'value ' + (pnl >= 0 ? 'green' : 'red');
-    document.getElementById('winrate').textContent = (d.win_rate || 0) + '%';
-    document.getElementById('trades-total').textContent = (d.wins || 0) + 'W / ' + (d.losses || 0) + 'L';
-
-    const hist = (d.historial || []).slice().reverse();
-    document.getElementById('history-list').innerHTML = hist.length ? hist.map(t => `
+    document.getElementById('capital').textContent = '$' + (d.capital_actual||0).toLocaleString();
+    document.getElementById('pnl').textContent = (pnl>=0?'+$':'-$')+Math.abs(pnl).toFixed(2);
+    document.getElementById('pnl').className = 'value '+(pnl>=0?'green':'red');
+    document.getElementById('winrate').textContent = (d.win_rate||0)+'%';
+    document.getElementById('trades-total').textContent = (d.wins||0)+'W / '+(d.losses||0)+'L';
+    const hist = (d.historial||[]).slice().reverse();
+    document.getElementById('history-list').innerHTML = hist.length ? hist.map(t=>`
       <div class="history-row">
         <span class="token">${t.token}</span>
         <span class="wallet-cell">${t.copied_from}</span>
         <span style="color:#aaa">$${t.invested}</span>
         <span style="color:#aaa">$${t.returned}</span>
-        <span class="${t.pnl >= 0 ? 'win' : 'loss'}">${t.pnl >= 0 ? '+' : ''}$${t.pnl}</span>
-        <span class="${t.result === 'WIN' ? 'win' : 'loss'}">${t.result}</span>
+        <span class="${t.pnl>=0?'win':'loss'}">${t.pnl>=0?'+':''}$${t.pnl}</span>
+        <span class="${t.result==='WIN'?'win':'loss'}">${t.result}</span>
       </div>`).join('') : '<div class="empty">Sin trades cerrados aún</div>';
   } catch(e) {}
 }
@@ -198,7 +706,7 @@ async function fetchPortfolio() {
   try {
     const r = await fetch('/api/portfolio');
     const positions = await r.json();
-    document.getElementById('portfolio-list').innerHTML = positions.length ? positions.map(p => `
+    document.getElementById('portfolio-list').innerHTML = positions.length ? positions.map(p=>`
       <div class="pos-row">
         <span class="token">${p.token_short}</span>
         <span style="color:#555;font-size:11px">desde ${p.entry_time}</span>
@@ -208,14 +716,24 @@ async function fetchPortfolio() {
   } catch(e) {}
 }
 
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+document.getElementById('bulk-input').addEventListener('input', function() {
+  const n = this.value.split(/[\n,\s]+/).filter(Boolean).length;
+  document.getElementById('bulk-count').textContent = n + ' detected';
+});
+
+wiRender();
 fetchWallets();
 fetchTrades();
 fetchPaper();
 fetchPortfolio();
+fetchPending();
+
 setInterval(fetchTrades, 5000);
 setInterval(fetchPaper, 8000);
 setInterval(fetchPortfolio, 8000);
 setInterval(fetchWallets, 30000);
+setInterval(fetchPending, 30000);
 </script>
 </body>
 </html>
