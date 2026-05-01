@@ -113,6 +113,26 @@ def remove_wallet():
     ok, msg = config.remove_from_watchlist(address)
     return jsonify({"ok": ok, "message": msg, "total": len(config.WATCHLIST)})
 
+# ── GET-based copy — evita CORS preflight del browser ────────────────────────
+# El dashboard usa GET en lugar de POST para agregar wallets,
+# así el browser no hace preflight y no hay CORS block.
+
+@app.route("/api/watchlist/copy", methods=["GET"])
+def copy_wallet_get():
+    address = request.args.get("wallet", "").strip()
+    if not address:
+        return jsonify({"ok": False, "error": "no wallet"}), 400
+    ok, msg = config.add_to_watchlist(address)
+    return jsonify({"ok": ok, "message": msg, "total": len(config.WATCHLIST)})
+
+@app.route("/api/watchlist/remove-get", methods=["GET"])
+def remove_wallet_get():
+    address = request.args.get("wallet", "").strip()
+    if not address:
+        return jsonify({"ok": False, "error": "no wallet"}), 400
+    ok, msg = config.remove_from_watchlist(address)
+    return jsonify({"ok": ok, "message": msg, "total": len(config.WATCHLIST)})
+
 # ── Pending queue — wallets encontradas por Honest Mercy ─────────────────────
 
 @app.route("/api/pending", methods=["GET"])
@@ -132,23 +152,18 @@ def add_pending():
     ok, msg = config.add_pending_wallet(data)
     return jsonify({"ok": ok, "message": msg, "pending_total": len(config.PENDING_WALLETS)})
 
-@app.route("/api/pending/dismiss", methods=["POST", "OPTIONS"])
-def dismiss_pending():
-    if request.method == "OPTIONS":
-        return "", 204
-    data = request.get_json()
-    if not data:
-        return jsonify({"ok": False, "error": "no body"}), 400
-    address = data.get("address", "").strip()
+@app.route("/api/pending/dismiss", methods=["GET"])
+def dismiss_pending_get():
+    address = request.args.get("wallet", "").strip()
+    if not address:
+        return jsonify({"ok": False, "error": "no wallet"}), 400
     removed = config.dismiss_pending(address)
     return jsonify({"ok": removed, "pending_total": len(config.PENDING_WALLETS)})
 
 # ── Analyze proxy — evita CORS llamando a Birdeye desde el server ─────────────
 
-@app.route("/api/analyze", methods=["GET", "OPTIONS"])
+@app.route("/api/analyze", methods=["GET"])
 def analyze_wallet():
-    if request.method == "OPTIONS":
-        return "", 204
     address = request.args.get("wallet", "").strip()
     if not address:
         return jsonify({"ok": False, "error": "no wallet"}), 400
