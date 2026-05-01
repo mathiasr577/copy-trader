@@ -8,7 +8,9 @@ import tracker
 import paper_trader
 
 app = Flask(__name__, static_folder="static", static_url_path="")
-CORS(app)
+
+# CORS abierto — permite requests desde el dashboard (artifact de Claude y cualquier origen)
+CORS(app, origins="*", supports_credentials=False)
 
 # ── Health ────────────────────────────────────────────────────────────────────
 
@@ -69,8 +71,10 @@ def get_watchlist():
         "total": len(config.WATCHLIST)
     })
 
-@app.route("/api/watchlist/add", methods=["POST"])
+@app.route("/api/watchlist/add", methods=["POST", "OPTIONS"])
 def add_wallet():
+    if request.method == "OPTIONS":
+        return "", 204
     data = request.get_json()
     if not data:
         return jsonify({"ok": False, "error": "no body"}), 400
@@ -80,8 +84,10 @@ def add_wallet():
     ok, msg = config.add_to_watchlist(address)
     return jsonify({"ok": ok, "message": msg, "total": len(config.WATCHLIST)})
 
-@app.route("/api/watchlist/remove", methods=["POST"])
+@app.route("/api/watchlist/remove", methods=["POST", "OPTIONS"])
 def remove_wallet():
+    if request.method == "OPTIONS":
+        return "", 204
     data = request.get_json()
     if not data:
         return jsonify({"ok": False, "error": "no body"}), 400
@@ -100,16 +106,20 @@ def get_pending():
         "total": len(config.PENDING_WALLETS)
     })
 
-@app.route("/api/pending/add", methods=["POST"])
+@app.route("/api/pending/add", methods=["POST", "OPTIONS"])
 def add_pending():
+    if request.method == "OPTIONS":
+        return "", 204
     data = request.get_json()
     if not data:
         return jsonify({"ok": False, "error": "no body"}), 400
     ok, msg = config.add_pending_wallet(data)
     return jsonify({"ok": ok, "message": msg, "pending_total": len(config.PENDING_WALLETS)})
 
-@app.route("/api/pending/dismiss", methods=["POST"])
+@app.route("/api/pending/dismiss", methods=["POST", "OPTIONS"])
 def dismiss_pending():
+    if request.method == "OPTIONS":
+        return "", 204
     data = request.get_json()
     if not data:
         return jsonify({"ok": False, "error": "no body"}), 400
@@ -118,17 +128,11 @@ def dismiss_pending():
     return jsonify({"ok": removed, "pending_total": len(config.PENDING_WALLETS)})
 
 # ── Analyze proxy — evita CORS llamando a Birdeye desde el server ─────────────
-#
-#  El dashboard no puede llamar a Birdeye directamente (CORS).
-#  En cambio llama a este endpoint, que corre en Railway y sí puede.
-#
-#  GET /api/analyze?wallet=ADDRESS
-#  Devuelve: { address, winRate, totalTrades, prePumpBuyRate,
-#              avgHoldTimeHours, totalVolumeUSD, realizedPnl,
-#              consecutiveWins, topTokens, lastActive }
 
-@app.route("/api/analyze", methods=["GET"])
+@app.route("/api/analyze", methods=["GET", "OPTIONS"])
 def analyze_wallet():
+    if request.method == "OPTIONS":
+        return "", 204
     address = request.args.get("wallet", "").strip()
     if not address:
         return jsonify({"ok": False, "error": "no wallet"}), 400
@@ -137,18 +141,16 @@ def analyze_wallet():
     headers = {"X-API-KEY": birdeye_key, "x-chain": "solana"}
 
     try:
-        # Portfolio
         portfolio_res = requests.get(
-            f"https://public-api.birdeye.so/v1/wallet/portfolio",
+            "https://public-api.birdeye.so/v1/wallet/portfolio",
             params={"wallet": address},
             headers=headers,
             timeout=20
         )
         portfolio_data = portfolio_res.json() if portfolio_res.ok else {}
 
-        # Trade history
         trades_res = requests.get(
-            f"https://public-api.birdeye.so/v1/wallet/transaction_history",
+            "https://public-api.birdeye.so/v1/wallet/transaction_history",
             params={"wallet": address, "limit": 100},
             headers=headers,
             timeout=20
