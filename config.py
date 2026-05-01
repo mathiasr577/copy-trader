@@ -2,7 +2,7 @@ import json
 import os
 
 HELIUS_API_KEY = "4695b324-4dd5-420c-890e-1d7cf26762c1"
-BIRDEYE_API_KEY = "c07460fca95843f1a83edb16a1835abc"
+BIRDEYE_API_KEY = "dc241f71cc354cfbb47394323eb9a08b"
 
 RPC_URL = f"https://mainnet.helius-rpc.com/?api-key={HELIUS_API_KEY}"
 

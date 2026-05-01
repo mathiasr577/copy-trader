@@ -12,8 +12,6 @@ import paper_trader
 app = Flask(__name__, static_folder="static", static_url_path="")
 CORS(app, origins="*", supports_credentials=False)
 
-# ── CORS manual ───────────────────────────────────────────────────────────────
-
 @app.after_request
 def add_cors_headers(response):
     response.headers["Access-Control-Allow-Origin"] = "*"
@@ -117,14 +115,6 @@ def copy_wallet_get():
     ok, msg = config.add_to_watchlist(address)
     return jsonify({"ok": ok, "message": msg, "total": len(config.WATCHLIST)})
 
-@app.route("/api/watchlist/remove-get", methods=["GET"])
-def remove_wallet_get():
-    address = request.args.get("wallet", "").strip()
-    if not address:
-        return jsonify({"ok": False, "error": "no wallet"}), 400
-    ok, msg = config.remove_from_watchlist(address)
-    return jsonify({"ok": ok, "message": msg, "total": len(config.WATCHLIST)})
-
 # ── Pending queue ─────────────────────────────────────────────────────────────
 
 @app.route("/api/pending", methods=["GET"])
@@ -149,7 +139,13 @@ def dismiss_pending_get():
     removed = config.dismiss_pending(address)
     return jsonify({"ok": removed, "pending_total": len(config.PENDING_WALLETS)})
 
-# ── Analyze — usa Helius RPC igual que Honest Mercy ──────────────────────────
+# ── Analyze — Birdeye token_list + Helius RPC para trades ────────────────────
+
+STABLECOINS = {
+    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+    "So11111111111111111111111111111111111111112",
+}
 
 def rpc_call(method, params):
     try:
@@ -161,61 +157,67 @@ def rpc_call(method, params):
     except Exception:
         return None
 
-STABLECOINS = {
-    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-    "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
-    "So11111111111111111111111111111111111111112",
-}
-
 @app.route("/api/analyze", methods=["GET"])
 def analyze_wallet():
     address = request.args.get("wallet", "").strip()
     if not address:
         return jsonify({"ok": False, "error": "no wallet"}), 400
 
+    birdeye_headers = {
+        "X-API-KEY": config.BIRDEYE_API_KEY,
+        "x-chain": "solana"
+    }
     now = datetime.datetime.now(datetime.timezone.utc).timestamp()
 
     try:
-        # 1. Balance SOL
-        result = rpc_call("getBalance", [address])
-        sol = (result.get("value", 0) if result else 0) / 1e9
+        # ── 1. Portfolio via Birdeye token_list ──────────────────────────────
+        portfolio_res = requests.get(
+            "https://public-api.birdeye.so/v1/wallet/token_list",
+            params={"wallet": address},
+            headers=birdeye_headers,
+            timeout=20
+        )
+        portfolio_data = portfolio_res.json() if portfolio_res.ok else {}
+        items = portfolio_data.get("data", {}).get("items", []) or []
 
-        # 2. Historial de transacciones (hasta 100)
+        total_usd = portfolio_data.get("data", {}).get("totalUsd", 0) or 0
+        top_tokens = [
+            item.get("symbol", "???")
+            for item in items
+            if item.get("symbol") and item.get("symbol") not in ["SOL", "USDC", "USDT"]
+        ][:5]
+
+        sol_balance = next(
+            (item.get("uiAmount", 0) for item in items if item.get("address") == "So11111111111111111111111111111111111111112"),
+            0
+        )
+
+        # ── 2. Historial via Helius RPC ──────────────────────────────────────
         sigs = rpc_call("getSignaturesForAddress", [address, {"limit": 100}]) or []
         total_txs = len(sigs)
 
-        if total_txs == 0:
-            return jsonify({
-                "ok": True, "address": address,
-                "winRate": 0, "totalTrades": 0, "prePumpBuyRate": 0,
-                "avgHoldTimeHours": 0, "totalVolumeUSD": 0, "realizedPnl": 0,
-                "consecutiveWins": 0, "topTokens": [], "lastActive": now * 1000,
-                "chain": "SOL", "solBalance": sol
-            })
-
-        # 3. Timestamps para antigüedad y actividad
         oldest = sigs[-1].get("blockTime", 0) if sigs else 0
         newest = sigs[0].get("blockTime", 0) if sigs else 0
         age_days = (now - oldest) / 86400 if oldest else 0
-        last_active_days = (now - newest) / 86400 if newest else 0
+        last_active_ms = (newest * 1000) if newest else now * 1000
 
-        # 4. Anti-bot: velocidad entre txs
+        # Anti-bot
         times = [s.get("blockTime", 0) for s in sigs[:20] if s.get("blockTime")]
         avg_gap = 0
         if len(times) >= 2:
             gaps = [abs(times[i] - times[i+1]) for i in range(len(times)-1)]
             avg_gap = sum(gaps) / len(gaps)
 
-        # 5. Analizar swaps (hasta 40 txs)
+        # ── 3. Analizar swaps (40 txs) ───────────────────────────────────────
         token_mints = set()
         buys = 0
         sells = 0
         estimated_pnl_sol = 0
         hold_times = []
         token_buy_times = {}
+        wins = 0
         consecutive_wins = 0
         current_streak = 0
-        wins = 0
 
         for sig_data in sigs[:40]:
             sig = sig_data.get("signature", "")
@@ -260,10 +262,9 @@ def analyze_wallet():
                         hold_h = (block_time - token_buy_times[mint]) / 3600
                         hold_times.append(hold_h)
 
-            # PnL estimado via SOL balance
-            pre_sol = meta.get("preBalances", [0])[0] / 1e9
-            post_sol = meta.get("postBalances", [0])[0] / 1e9
-            delta_sol = post_sol - pre_sol
+            pre_sol_bal = meta.get("preBalances", [0])[0] / 1e9
+            post_sol_bal = meta.get("postBalances", [0])[0] / 1e9
+            delta_sol = post_sol_bal - pre_sol_bal
             estimated_pnl_sol += delta_sol
 
             if delta_sol > 0.001:
@@ -278,17 +279,16 @@ def analyze_wallet():
         total_trades = buys + sells
         win_rate = wins / max(total_txs, 1)
         avg_hold = sum(hold_times) / len(hold_times) if hold_times else 0
-
-        # Pre-pump rate: ratio de buys vs sells (buys tempranos = más pre-pump)
         pre_pump_rate = buys / max(total_trades, 1) if total_trades > 0 else 0
 
-        # SOL price estimado para convertir PnL
-        sol_price = 150  # aproximado, se puede mejorar con precio real
+        # SOL price aproximado
+        sol_price = 150
         pnl_usd = estimated_pnl_sol * sol_price
-        volume_usd = abs(estimated_pnl_sol) * sol_price * 3  # estimado
+        volume_usd = max(total_usd, abs(estimated_pnl_sol) * sol_price * 3)
 
-        # Top tokens
-        top_tokens = list(token_mints)[:5]
+        # Merge top tokens: Birdeye primero, Helius como fallback
+        if not top_tokens:
+            top_tokens = list(token_mints)[:5]
 
         return jsonify({
             "ok": True,
@@ -301,13 +301,12 @@ def analyze_wallet():
             "realizedPnl": round(pnl_usd, 2),
             "consecutiveWins": consecutive_wins,
             "topTokens": top_tokens,
-            "lastActive": (newest * 1000) if newest else now * 1000,
+            "lastActive": last_active_ms,
             "chain": "SOL",
-            "solBalance": round(sol, 3),
+            "solBalance": round(sol_balance, 3),
             "ageDays": round(age_days, 0),
             "txCount": total_txs,
             "uniqueTokens": len(token_mints),
-            "avgGapSeconds": round(avg_gap, 1),
         })
 
     except Exception as e:
