@@ -30,3 +30,29 @@ STABLECOINS = {
     "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
     "So11111111111111111111111111111111111111112",
 }
+
+def add_to_watchlist(address):
+    """Agrega una wallet en memoria Y persiste al JSON sin reiniciar nada."""
+    if address in BLACKLIST:
+        return False, "blacklisted"
+    if address in WATCHLIST:
+        return False, "already exists"
+
+    WATCHLIST.append(address)
+
+    with open("watchlist.json", "w") as f:
+        json.dump({"addresses": WATCHLIST}, f, indent=2)
+
+    return True, "added"
+
+def remove_from_watchlist(address):
+    """Remueve una wallet en memoria Y persiste al JSON sin reiniciar nada."""
+    if address not in WATCHLIST:
+        return False, "not found"
+
+    WATCHLIST.remove(address)
+
+    with open("watchlist.json", "w") as f:
+        json.dump({"addresses": WATCHLIST}, f, indent=2)
+
+    return True, "removed"

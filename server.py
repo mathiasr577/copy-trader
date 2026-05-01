@@ -1,7 +1,8 @@
 import threading
 import os
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
+import config
 import tracker
 import paper_trader
 
@@ -36,12 +37,11 @@ def get_trades():
 
 @app.route("/api/wallets")
 def get_wallets():
-    from config import WATCHLIST
     return jsonify([{
         "address": w,
         "short": w[:6] + "..." + w[-4:],
         "status": "active" if w in tracker.last_seen else "initializing"
-    } for w in WATCHLIST])
+    } for w in config.WATCHLIST])
 
 @app.route("/api/paper")
 def get_paper():
@@ -51,7 +51,51 @@ def get_paper():
 def get_portfolio():
     return jsonify(list(paper_trader.portfolio.values()))
 
-# Iniciar threads fuera del if __name__ para que funcione tanto con python directo como con gunicorn
+# ── Watchlist endpoints ────────────────────────────────────────────────────────
+
+@app.route("/api/watchlist/add", methods=["POST"])
+def add_wallet():
+    data = request.get_json()
+    if not data:
+        return jsonify({"ok": False, "error": "no body"}), 400
+
+    address = data.get("address", "").strip()
+    if not address:
+        return jsonify({"ok": False, "error": "no address"}), 400
+
+    ok, msg = config.add_to_watchlist(address)
+    return jsonify({
+        "ok": ok,
+        "message": msg,
+        "total": len(config.WATCHLIST)
+    })
+
+@app.route("/api/watchlist/remove", methods=["POST"])
+def remove_wallet():
+    data = request.get_json()
+    if not data:
+        return jsonify({"ok": False, "error": "no body"}), 400
+
+    address = data.get("address", "").strip()
+    if not address:
+        return jsonify({"ok": False, "error": "no address"}), 400
+
+    ok, msg = config.remove_from_watchlist(address)
+    return jsonify({
+        "ok": ok,
+        "message": msg,
+        "total": len(config.WATCHLIST)
+    })
+
+@app.route("/api/watchlist", methods=["GET"])
+def get_watchlist():
+    return jsonify({
+        "addresses": config.WATCHLIST,
+        "total": len(config.WATCHLIST)
+    })
+
+# ── Threads ───────────────────────────────────────────────────────────────────
+
 t1 = threading.Thread(target=tracker.run_loop, daemon=True)
 t2 = threading.Thread(target=trading_loop, daemon=True)
 t1.start()
@@ -61,4 +105,3 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     print("[server] Dashboard iniciando...")
     app.run(host="0.0.0.0", port=port, debug=False)
-    

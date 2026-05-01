@@ -3,7 +3,8 @@ import json
 import os
 import requests
 from datetime import datetime
-from config import RPC_URL, WATCHLIST, POLL_INTERVAL
+import config
+from config import RPC_URL, POLL_INTERVAL
 from parser import parse_swap
 
 TRADES_FILE = "trades_history.json"
@@ -85,12 +86,13 @@ def process_wallet(wallet):
             print(f"{icon} {swap['action']} | {swap['wallet_short']} | {swap['token_short']} | {swap['amount']} | {ts}")
 
 def run_loop():
-    print(f"[tracker] Iniciando — {len(WATCHLIST)} wallets, polling cada {POLL_INTERVAL}s")
+    # Usa config.WATCHLIST directamente — lista viva, se actualiza sin reiniciar
+    print(f"[tracker] Iniciando — {len(config.WATCHLIST)} wallets, polling cada {POLL_INTERVAL}s")
     cycle = 0
     while True:
         cycle += 1
-        print(f"[ciclo {cycle}]")
-        for wallet in WATCHLIST:
+        print(f"[ciclo {cycle}] — {len(config.WATCHLIST)} wallets activas")
+        for wallet in list(config.WATCHLIST):  # list() para evitar errores si se modifica durante el ciclo
             try:
                 process_wallet(wallet)
                 time.sleep(0.4)
