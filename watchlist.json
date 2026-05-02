@@ -1,4 +1,4 @@
-cat > watchlist.json << 'JSONEOF'
+
 {
   "wallets": [],
   "addresses": [
