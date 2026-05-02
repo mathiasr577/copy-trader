@@ -54,5 +54,5 @@ wallets = [
 with open("watchlist.json", "w") as f:
     json.dump({"wallets": [{"address": w} for w in wallets], "addresses": wallets}, f, indent=2)
 
-print(f"✓ watchlist.json actualizado con {len(wallets)} wallets")
+print(f"✓ {len(wallets)} wallets guardadas")
 EOF
