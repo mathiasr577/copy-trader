@@ -1,7 +1,7 @@
-python3 - << 'EOF'
-import json
-
-wallets = [
+cat > watchlist.json << 'JSONEOF'
+{
+  "wallets": [],
+  "addresses": [
     "8YP4FfMx7xzknYqa38Jmm56awRKyeLv4iQZ8Ji8HXYK9",
     "2Z7GV6B6FxghP1Xmzk2WpGQ9sNvNbwwoX8CPfK9drEf7",
     "6jz6evaLNRDJkXUypB6coiTZoFHtVTck4cJBpQ78kXnq",
@@ -48,11 +48,6 @@ wallets = [
     "F72rukmZ7rap4i7A7htiE1ZjYRiXLexVgs94XwqHjpTa",
     "BPDYjwyuxtZExAeAdUZmQ9s21L7NAB8V2zX2neeZLmce",
     "D5qq1C9EvAjAD4WzX7EMFH4TddJFZ6MxFB6KfC8wW7W6",
-    "H1QERpW1VaP9FvMeSJj9ELCeKyUQfDEEchYLRKEHLi9u",
-]
-
-with open("watchlist.json", "w") as f:
-    json.dump({"wallets": [{"address": w} for w in wallets], "addresses": wallets}, f, indent=2)
-
-print(f"✓ {len(wallets)} wallets guardadas")
-EOF
+    "H1QERpW1VaP9FvMeSJj9ELCeKyUQfDEEchYLRKEHLi9u"
+  ]
+}
