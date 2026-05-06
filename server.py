@@ -34,21 +34,6 @@ def handle_options():
 def health():
     return "ok", 200
 
-# ── Trading loop ──────────────────────────────────────────────────────────────
-
-processed_sigs = set()
-
-def trading_loop():
-    while True:
-        for trade in tracker.detected_trades:
-            sig = trade.get("signature")
-            if sig and sig not in processed_sigs:
-                processed_sigs.add(sig)
-                paper_trader.process_trade(trade)
-        paper_trader.check_stop_take()
-        paper_trader.save_state()
-        time.sleep(10)
-
 # ── Static ────────────────────────────────────────────────────────────────────
 
 @app.route("/")
@@ -139,7 +124,7 @@ def dismiss_pending_get():
     removed = config.dismiss_pending(address)
     return jsonify({"ok": removed, "pending_total": len(config.PENDING_WALLETS)})
 
-# ── Analyze — Birdeye token_list + Helius RPC para trades ────────────────────
+# ── Analyze ───────────────────────────────────────────────────────────────────
 
 STABLECOINS = {
     "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
@@ -170,7 +155,6 @@ def analyze_wallet():
     now = datetime.datetime.now(datetime.timezone.utc).timestamp()
 
     try:
-        # ── 1. Portfolio via Birdeye token_list ──────────────────────────────
         portfolio_res = requests.get(
             "https://public-api.birdeye.so/v1/wallet/token_list",
             params={"wallet": address},
@@ -192,7 +176,6 @@ def analyze_wallet():
             0
         )
 
-        # ── 2. Historial via Helius RPC ──────────────────────────────────────
         sigs = rpc_call("getSignaturesForAddress", [address, {"limit": 100}]) or []
         total_txs = len(sigs)
 
@@ -201,14 +184,12 @@ def analyze_wallet():
         age_days = (now - oldest) / 86400 if oldest else 0
         last_active_ms = (newest * 1000) if newest else now * 1000
 
-        # Anti-bot
         times = [s.get("blockTime", 0) for s in sigs[:20] if s.get("blockTime")]
         avg_gap = 0
         if len(times) >= 2:
             gaps = [abs(times[i] - times[i+1]) for i in range(len(times)-1)]
             avg_gap = sum(gaps) / len(gaps)
 
-        # ── 3. Analizar swaps (40 txs) ───────────────────────────────────────
         token_mints = set()
         buys = 0
         sells = 0
@@ -281,12 +262,10 @@ def analyze_wallet():
         avg_hold = sum(hold_times) / len(hold_times) if hold_times else 0
         pre_pump_rate = buys / max(total_trades, 1) if total_trades > 0 else 0
 
-        # SOL price aproximado
         sol_price = 150
         pnl_usd = estimated_pnl_sol * sol_price
         volume_usd = max(total_usd, abs(estimated_pnl_sol) * sol_price * 3)
 
-        # Merge top tokens: Birdeye primero, Helius como fallback
         if not top_tokens:
             top_tokens = list(token_mints)[:5]
 
@@ -314,10 +293,9 @@ def analyze_wallet():
 
 # ── Threads ───────────────────────────────────────────────────────────────────
 
+# Solo el tracker — el paper trader se llama desde dentro del tracker
 t1 = threading.Thread(target=tracker.run_loop, daemon=True)
-t2 = threading.Thread(target=trading_loop, daemon=True)
 t1.start()
-t2.start()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
