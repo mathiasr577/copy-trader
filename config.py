@@ -7,7 +7,7 @@ BIRDEYE_API_KEY = "dc241f71cc354cfbb47394323eb9a08b"
 RPC_URL = f"https://mainnet.helius-rpc.com/?api-key={HELIUS_API_KEY}"
 
 BLACKLIST = {
-    "HkFGQsW8mr8DTC2AE2WcC7MzwSnynfEryGMQSht271nf",  # bot confirmado
+    "HkFGQsW8mr8DTC2AE2WcC7MzwSnynfEryGMQSht271nf",
 }
 
 def load_watchlist():
@@ -18,14 +18,25 @@ def load_watchlist():
                 if not content:
                     return []
                 data = json.loads(content)
+
+                # Soporta ambos formatos:
+                # {"addresses": [...]}  ← formato viejo
+                # {"wallets": [...]}    ← formato nuevo (lista de strings o dicts)
                 addresses = data.get("addresses", [])
+
+                if not addresses:
+                    wallets = data.get("wallets", [])
+                    for w in wallets:
+                        if isinstance(w, str):
+                            addresses.append(w)
+                        elif isinstance(w, dict) and "address" in w:
+                            addresses.append(w["address"])
+
                 return [a for a in addresses if a not in BLACKLIST]
-        except Exception:
+        except Exception as e:
+            print(f"[config] Error cargando watchlist: {e}")
             return []
-    return [
-        "GFHMc9BegxJXLdHJrABxNVoPRdnmVxXiNeoUCEpgXVHw",
-        "2ZmG87ddU7rcusmzgqRMu91FSrCb5jTnpGrD9yUevbr6",
-    ]
+    return []
 
 def load_wallet_details():
     if os.path.exists("watchlist.json"):
@@ -36,7 +47,11 @@ def load_wallet_details():
                     return {}
                 data = json.loads(content)
                 wallets = data.get("wallets", [])
-                return {w["address"]: w for w in wallets if "address" in w}
+                result = {}
+                for w in wallets:
+                    if isinstance(w, dict) and "address" in w:
+                        result[w["address"]] = w
+                return result
         except Exception:
             return {}
     return {}
@@ -53,10 +68,19 @@ STABLECOINS = {
 }
 
 def save_watchlist():
+    """Siempre guarda con ambas keys para compatibilidad."""
     existing_details = load_wallet_details()
-    wallets = [existing_details.get(a, {"address": a}) for a in WATCHLIST]
+    wallets_list = []
+    for a in WATCHLIST:
+        if a in existing_details:
+            wallets_list.append(existing_details[a])
+        else:
+            wallets_list.append({"address": a})
     with open("watchlist.json", "w") as f:
-        json.dump({"wallets": wallets, "addresses": WATCHLIST}, f, indent=2)
+        json.dump({
+            "addresses": WATCHLIST,       # ← lo que load_watchlist() lee
+            "wallets": wallets_list        # ← detalles extras
+        }, f, indent=2)
 
 def add_to_watchlist(address):
     if address in BLACKLIST:
