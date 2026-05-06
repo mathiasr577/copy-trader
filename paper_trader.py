@@ -12,7 +12,8 @@ BIRDEYE_HEADERS = {
 
 CAPITAL = 1000
 MAX_PER_TRADE = 0.05
-STOP_LOSS = 0.15
+STOP_LOSS = 0.15          # Stop fijo inicial (15%) — piso de entrada
+TRAILING_STOP = 0.30      # Trailing stop (30% desde el máximo histórico)
 TAKE_PROFIT = 0.50
 
 STATE_FILE = "paper_state.json"
@@ -28,6 +29,10 @@ def load_state():
             trade_history = summary.get("historial", [])
             # Reconstruir portfolio desde lista guardada
             portfolio = {p["token"]: p for p in data.get("portfolio", [])}
+            # Compatibilidad hacia atrás: agregar highest_price si no existe
+            for token, pos in portfolio.items():
+                if "highest_price" not in pos:
+                    pos["highest_price"] = pos["entry_price"]
             print(f"[paper] Estado cargado: capital=${current_capital:.2f}, {len(portfolio)} posiciones abiertas, {len(trade_history)} trades")
         except Exception as e:
             print(f"[paper] Error cargando estado: {e}")
@@ -69,19 +74,24 @@ def simulate_buy(swap):
     tokens_bought = position_size / price
     current_capital -= position_size
 
+    stop_loss_price = price * (1 - STOP_LOSS)
+    trailing_stop_price = price * (1 - TRAILING_STOP)  # Al entrar, trailing = stop fijo si TRAILING > STOP_LOSS
+
     portfolio[token] = {
         "token": token,
         "token_short": swap["token_short"],
         "copied_from": wallet,
         "entry_price": price,
+        "highest_price": price,           # Máximo histórico visto desde la entrada
         "tokens": tokens_bought,
         "invested": position_size,
         "entry_time": datetime.now().strftime("%H:%M:%S"),
-        "stop_loss": price * (1 - STOP_LOSS),
+        "stop_loss": stop_loss_price,     # Stop fijo inicial (15%)
+        "trailing_stop": trailing_stop_price,  # Stop dinámico (30% desde el máximo)
         "take_profit": price * (1 + TAKE_PROFIT),
     }
 
-    print(f"[paper] 🟢 BUY simulado | {swap['token_short']} | ${position_size:.2f} @ ${price:.6f} | copiando {wallet}")
+    print(f"[paper] 🟢 BUY simulado | {swap['token_short']} | ${position_size:.2f} @ ${price:.6f} | stop=${stop_loss_price:.6f} | copiando {wallet}")
 
 def simulate_sell(swap):
     global current_capital, portfolio, trade_history
@@ -96,10 +106,19 @@ def simulate_sell(swap):
     if not price or price <= 0:
         return
 
+    _close_position(token, pos, price, reason="SELL")
+
+def _close_position(token, pos, price, reason="SELL"):
+    """Cierra una posición y registra el trade."""
+    global current_capital, trade_history
+
     value = pos["tokens"] * price
     pnl = value - pos["invested"]
     pnl_pct = (pnl / pos["invested"]) * 100
     current_capital += value
+
+    # Calcular cuánto subió desde entrada antes de cerrar
+    peak_pct = ((pos["highest_price"] - pos["entry_price"]) / pos["entry_price"]) * 100
 
     result = {
         "token": pos["token_short"],
@@ -108,8 +127,10 @@ def simulate_sell(swap):
         "returned": round(value, 2),
         "pnl": round(pnl, 2),
         "pnl_pct": round(pnl_pct, 1),
+        "peak_pct": round(peak_pct, 1),   # Útil para ver si el trailing funcionó
         "entry_time": pos["entry_time"],
         "exit_time": datetime.now().strftime("%H:%M:%S"),
+        "exit_reason": reason,
         "result": "WIN" if pnl > 0 else "LOSS"
     }
 
@@ -117,44 +138,42 @@ def simulate_sell(swap):
     del portfolio[token]
 
     icon = "✅" if pnl > 0 else "❌"
-    print(f"[paper] {icon} SELL simulado | {pos['token_short']} | PnL: ${pnl:.2f} ({pnl_pct:.1f}%)")
+    print(f"[paper] {icon} {reason} | {pos['token_short']} | PnL: ${pnl:.2f} ({pnl_pct:.1f}%) | peak: +{peak_pct:.1f}%")
 
 def check_stop_take():
-    global portfolio, current_capital
+    global portfolio
     to_close = []
 
-    for token, pos in portfolio.items():
+    for token, pos in list(portfolio.items()):
         price = get_token_price(token)
-        if not price:
+        if not price or price <= 0:
             continue
 
-        if price <= pos["stop_loss"]:
-            print(f"[paper] 🛑 STOP LOSS | {pos['token_short']} | precio cayó a ${price:.6f}")
-            to_close.append(("stop", token, price))
+        # --- Actualizar máximo histórico y trailing stop ---
+        if price > pos["highest_price"]:
+            pos["highest_price"] = price
+            new_trailing = price * (1 - TRAILING_STOP)
+            # El trailing stop solo sube, nunca baja
+            if new_trailing > pos["trailing_stop"]:
+                pos["trailing_stop"] = new_trailing
+                print(f"[paper] 📈 TRAILING UP | {pos['token_short']} | nuevo stop=${new_trailing:.6f} (precio=${price:.6f})")
+
+        # El stop activo es el mayor entre stop fijo inicial y trailing stop
+        active_stop = max(pos["stop_loss"], pos["trailing_stop"])
+
+        # --- Verificar condiciones de cierre ---
+        if price <= active_stop:
+            stop_type = "TRAILING STOP" if pos["trailing_stop"] > pos["stop_loss"] else "STOP LOSS"
+            print(f"[paper] 🛑 {stop_type} | {pos['token_short']} | precio=${price:.6f} <= stop=${active_stop:.6f}")
+            to_close.append((stop_type, token, price))
+
         elif price >= pos["take_profit"]:
-            print(f"[paper] 🎯 TAKE PROFIT | {pos['token_short']} | precio subió a ${price:.6f}")
-            to_close.append(("take", token, price))
+            print(f"[paper] 🎯 TAKE PROFIT | {pos['token_short']} | precio=${price:.6f}")
+            to_close.append(("TAKE PROFIT", token, price))
 
     for reason, token, price in to_close:
-        pos = portfolio[token]
-        value = pos["tokens"] * price
-        pnl = value - pos["invested"]
-        pnl_pct = (pnl / pos["invested"]) * 100
-
-        trade_history.append({
-            "token": pos["token_short"],
-            "copied_from": pos["copied_from"],
-            "invested": round(pos["invested"], 2),
-            "returned": round(value, 2),
-            "pnl": round(pnl, 2),
-            "pnl_pct": round(pnl_pct, 1),
-            "entry_time": pos["entry_time"],
-            "exit_time": datetime.now().strftime("%H:%M:%S"),
-            "result": "WIN" if pnl > 0 else "LOSS"
-        })
-
-        current_capital += value
-        del portfolio[token]
+        if token in portfolio:  # Puede haber sido cerrado ya
+            _close_position(token, portfolio[token], price, reason=reason)
 
 def get_summary():
     total_trades = len(trade_history)
