@@ -10,19 +10,19 @@ BIRDEYE_HEADERS = {
 }
 
 RPC_URL = f"https://mainnet.helius-rpc.com/?api-key={HELIUS_API_KEY}"
-
-# URL del server en Railway — el finder le notifica las wallets aprobadas
 SERVER_URL = "https://copy-trader-production-3ae0.up.railway.app"
 
-# FILTROS
-MIN_PNL           = 10000
-MIN_TRADES        = 10
-MIN_SOL           = 0.5
-MIN_RECENT_DAYS   = 7
-MIN_AGE_DAYS      = 14
-MAX_BOT_GAP       = 3
-MIN_UNIQUE_TOKENS = 3
+# ─── FILTROS ESTRICTOS ────────────────────────────────────────────────────────
+MIN_SOL           = 2.0    # Antes: 0.5  — wallets con más capital
+MIN_TRADES        = 30     # Antes: 10   — más historial para juzgar
+MIN_AGE_DAYS      = 30     # Antes: 14   — wallets más veteranas
+MIN_RECENT_DAYS   = 3      # Antes: 7    — más activas recientemente
+MIN_UNIQUE_TOKENS = 8      # Antes: 3    — más diversificadas
+MIN_WIN_RATE      = 0.55   # NUEVO       — mínimo 55% de trades ganadores
+MIN_PNL_SOL       = 5.0    # NUEVO       — mínimo 5 SOL de ganancia estimada
+MAX_BOT_GAP       = 5      # Antes: 3    — más tolerante con humanos lentos
 MAX_WALLETS       = 50
+# ─────────────────────────────────────────────────────────────────────────────
 
 STABLECOINS = {
     "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
@@ -40,13 +40,7 @@ def rpc(method, params):
     except Exception:
         return None
 
-# ─── NOTIFICAR AL SERVER ──────────────────────────────────────────────────────
-
 def notify_server(wallet_data):
-    """
-    Cuando el finder aprueba una wallet, la manda al server
-    para que aparezca en el dashboard en tiempo real.
-    """
     try:
         r = requests.post(
             f"{SERVER_URL}/api/pending/add",
@@ -168,7 +162,7 @@ def analyze_wallet(address):
     if last_active > MIN_RECENT_DAYS:
         return None, f"inactiva hace {last_active:.0f} días"
 
-    # 5. Anti-bot por velocidad
+    # 5. Anti-bot
     times = [s.get("blockTime", 0) for s in sigs[:20] if s.get("blockTime")]
     if len(times) >= 2:
         gaps = [abs(times[i] - times[i+1]) for i in range(len(times)-1)]
@@ -176,13 +170,16 @@ def analyze_wallet(address):
         if avg_gap < MAX_BOT_GAP:
             return None, f"bot por velocidad ({avg_gap:.1f}s)"
 
-    # 6. Diversidad de tokens + PnL estimado
+    # 6. Análisis de trades — tokens, PnL, win rate real
     token_mints = set()
     buys = 0
     sells = 0
     estimated_pnl = 0
+    token_buy_prices = {}   # mint → SOL gastado al comprar
+    wins = 0
+    losses = 0
 
-    for sig_data in sigs[:40]:
+    for sig_data in sigs[:60]:  # Analizamos más txs para mejor win rate
         sig = sig_data.get("signature", "")
         if not sig:
             continue
@@ -209,28 +206,54 @@ def analyze_wallet(address):
             if b.get("owner") == address:
                 post_map[b["mint"]] = float(b.get("uiTokenAmount", {}).get("uiAmount") or 0)
 
+        pre_sol  = meta.get("preBalances", [0])[0] / 1e9
+        post_sol = meta.get("postBalances", [0])[0] / 1e9
+        delta_sol = post_sol - pre_sol
+
         for mint in set(list(pre_map.keys()) + list(post_map.keys())):
             if mint in STABLECOINS:
                 continue
             token_mints.add(mint)
             delta = post_map.get(mint, 0) - pre_map.get(mint, 0)
+
             if delta > 0.001:
+                # BUY — registrar cuánto SOL gastó
                 buys += 1
+                token_buy_prices[mint] = delta_sol  # negativo = SOL gastado
             elif delta < -0.001:
+                # SELL — calcular si ganó o perdió vs la compra
                 sells += 1
+                if mint in token_buy_prices:
+                    # Si el SOL recibido al vender > SOL gastado al comprar = WIN
+                    if delta_sol > abs(token_buy_prices.get(mint, 0)):
+                        wins += 1
+                    else:
+                        losses += 1
+                    del token_buy_prices[mint]
 
-        pre_sol  = meta.get("preBalances", [0])[0] / 1e9
-        post_sol = meta.get("postBalances", [0])[0] / 1e9
-        estimated_pnl += (post_sol - pre_sol)
-
+        estimated_pnl += delta_sol
         time.sleep(0.08)
 
+    # Filtro: diversidad de tokens
     if len(token_mints) < MIN_UNIQUE_TOKENS:
         return None, f"poca diversidad ({len(token_mints)} tokens)"
 
+    # Filtro: ratio compra/venta no desequilibrado
     total_ops = buys + sells
     if total_ops > 0 and min(buys, sells) / max(buys, sells) < 0.15:
         return None, f"ratio desequilibrado ({buys}B/{sells}S)"
+
+    # Filtro: PnL mínimo en SOL
+    if estimated_pnl < MIN_PNL_SOL:
+        return None, f"PnL insuficiente ({estimated_pnl:.2f} SOL)"
+
+    # Filtro: win rate mínimo
+    total_closed = wins + losses
+    win_rate = wins / total_closed if total_closed > 0 else 0
+    if total_closed < 5:
+        return None, f"pocos trades cerrados para calcular WR ({total_closed})"
+    if win_rate < MIN_WIN_RATE:
+        return None, f"win rate bajo ({win_rate:.1%})"
 
     return {
         "address": address,
@@ -241,6 +264,9 @@ def analyze_wallet(address):
         "unique_tokens": len(token_mints),
         "buys": buys,
         "sells": sells,
+        "wins": wins,
+        "losses": losses,
+        "win_rate": round(win_rate, 3),
         "estimated_pnl_sol": round(estimated_pnl, 3),
         "found_at": datetime.datetime.utcnow().isoformat(),
         "source": "honest_mercy"
@@ -250,12 +276,14 @@ def analyze_wallet(address):
 
 def run_finder():
     print("=" * 60)
-    print("[finder] Honest Mercy — Wallet Finder")
+    print("[finder] Honest Mercy — Wallet Finder v2 (filtros estrictos)")
     print(f"  SOL mínimo:     {MIN_SOL}")
     print(f"  Trades mínimos: {MIN_TRADES}")
     print(f"  Activa últimos: {MIN_RECENT_DAYS} días")
     print(f"  Antigüedad mín: {MIN_AGE_DAYS} días")
     print(f"  Tokens únicos:  {MIN_UNIQUE_TOKENS}+")
+    print(f"  Win rate mín:   {MIN_WIN_RATE:.0%}")
+    print(f"  PnL mín:        {MIN_PNL_SOL} SOL")
     print(f"  Server:         {SERVER_URL}")
     print("=" * 60)
 
@@ -265,8 +293,11 @@ def run_finder():
         with open("watchlist.json") as f:
             data = json.load(f)
             for w in data.get("wallets", []):
-                existing[w["address"]] = w
-        print(f"[finder] {len(existing)} wallets existentes")
+                if isinstance(w, dict):
+                    existing[w["address"]] = w
+                elif isinstance(w, str):
+                    existing[w] = {"address": w}
+        print(f"[finder] {len(existing)} wallets existentes en watchlist")
     except Exception:
         print("[finder] Empezando desde cero")
 
@@ -280,34 +311,40 @@ def run_finder():
     print("-" * 60)
 
     new_count = 0
-    for address in list(candidates)[:60]:
-        if len(existing) >= MAX_WALLETS:
-            print(f"[finder] Límite de {MAX_WALLETS} wallets alcanzado")
-            break
+    rejected = {"balance": 0, "txs": 0, "edad": 0, "inactiva": 0, "bot": 0, "diversidad": 0, "ratio": 0, "pnl": 0, "winrate": 0, "otros": 0}
 
+    for address in list(candidates)[:80]:
         print(f"\n→ {address[:8]}...")
         result, reason = analyze_wallet(address)
+
         if result:
-            existing[address] = result
             new_count += 1
-            print(f"  ✅ APROBADA | SOL: {result['sol_balance']} | TXs: {result['tx_count']} | Edad: {result['age_days']}d | Tokens: {result['unique_tokens']}")
-            # ← NUEVO: notificar al dashboard en tiempo real
+            print(f"  ✅ APROBADA | WR: {result['win_rate']:.1%} | PnL: {result['estimated_pnl_sol']} SOL | Tokens: {result['unique_tokens']} | Edad: {result['age_days']}d")
             notify_server(result)
         else:
             print(f"  ❌ {reason}")
+            # Tracking de razones de rechazo
+            if "balance" in reason: rejected["balance"] += 1
+            elif "txs" in reason: rejected["txs"] += 1
+            elif "nueva" in reason: rejected["edad"] += 1
+            elif "inactiva" in reason: rejected["inactiva"] += 1
+            elif "bot" in reason: rejected["bot"] += 1
+            elif "diversidad" in reason: rejected["diversidad"] += 1
+            elif "ratio" in reason: rejected["ratio"] += 1
+            elif "PnL" in reason: rejected["pnl"] += 1
+            elif "win rate" in reason: rejected["winrate"] += 1
+            else: rejected["otros"] += 1
 
         time.sleep(0.2)
 
-    # Guardar al JSON también (backup)
-    all_wallets = list(existing.values())
-    addresses = [w["address"] for w in all_wallets]
-    with open("watchlist.json", "w") as f:
-        json.dump({"wallets": all_wallets, "addresses": addresses}, f, indent=2)
-
     print(f"\n{'='*60}")
-    print(f"[finder] +{new_count} nuevas | Total: {len(all_wallets)} wallets")
+    print(f"[finder] +{new_count} nuevas aprobadas de {len(candidates)} candidatas")
+    print(f"[finder] Razones de rechazo:")
+    for k, v in rejected.items():
+        if v > 0:
+            print(f"  {k}: {v}")
 
-    return addresses
+    return list(existing.keys())
 
 if __name__ == "__main__":
     run_finder()
