@@ -181,7 +181,7 @@ def _stop_loss_loop():
             check_stop_take()
         except Exception as e:
             print(f"[paper] Error en stop loop: {e}")
-        time.sleep(1)
+        time.sleep(10)
 
 # Arrancar thread dedicado al importar el módulo
 _stop_thread = threading.Thread(target=_stop_loss_loop, daemon=True)
