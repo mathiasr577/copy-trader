@@ -184,8 +184,8 @@ def _stop_loss_loop():
         time.sleep(10)
 
 # Arrancar thread dedicado al importar el módulo
-_stop_thread = threading.Thread(target=_stop_loss_loop, daemon=True)
-_stop_thread.start()
+# _stop_thread = threading.Thread(target=_stop_loss_loop, daemon=True)
+# _stop_thread.start()
 
 def get_summary():
     total_trades = len(trade_history)
