@@ -4,7 +4,8 @@ import os
 HELIUS_API_KEY = "4695b324-4dd5-420c-890e-1d7cf26762c1"
 BIRDEYE_API_KEY = "8f4c580eed1e490caeba742904617a07"
 
-RPC_URL = f"https://mainnet.helius-rpc.com/?api-key={HELIUS_API_KEY}"
+# Cambiado a RPC público de Solana (gratis, sin límites estrictos)
+RPC_URL = "https://api.mainnet-beta.solana.com"
 
 BLACKLIST = {
     "HkFGQsW8mr8DTC2AE2WcC7MzwSnynfEryGMQSht271nf",
