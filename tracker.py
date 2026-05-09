@@ -15,7 +15,8 @@ TRADES_FILE = "trades_history.json"
 HELIUS_API_KEY = getattr(config, "HELIUS_API_KEY", "4695b324-4dd5-420c-890e-1d7cf26762c1")
 
 # transactionSubscribe manda la tx completa — cero RPC call extra
-WS_URL = f"wss://mainnet.helius-rpc.com/?api-key={HELIUS_API_KEY}"
+# WebSocket público de Solana (gratis)
+WS_URL = "wss://api.mainnet-beta.solana.com"
 
 # Thread pool listo — evita overhead de crear threads por cada tx
 _executor = ThreadPoolExecutor(max_workers=8)
