@@ -68,3 +68,10 @@ def get_hold_time_limit(token_data):
         return MAX_HOLD_TIME_LONG
     else:
         return MAX_HOLD_TIME_SHORT
+
+# Lista de stablecoins para filtrar (requerido por parser.py)
+STABLECOINS = [
+    'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',  # USDC
+    'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',  # USDT
+    'So11111111111111111111111111111111111111112',   # Wrapped SOL
+]
