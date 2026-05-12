@@ -48,11 +48,11 @@ def get_trades():
 
 @app.route("/api/paper")
 def get_paper():
-    return jsonify(paper_trader.get_summary())
+    return jsonify(paper_trader.get_summary())          # ✅ FIXED
 
 @app.route("/api/portfolio")
 def get_portfolio():
-    return jsonify(list(paper_trader.portfolio.values()))
+    return jsonify(paper_trader.get_portfolio())        # ✅ FIXED
 
 # ── Watchlist ─────────────────────────────────────────────────────────────────
 
@@ -293,7 +293,6 @@ def analyze_wallet():
 
 # ── Threads ───────────────────────────────────────────────────────────────────
 
-# Solo el tracker — el paper trader se llama desde dentro del tracker
 t1 = threading.Thread(target=tracker.run_loop, daemon=True)
 t1.start()
 

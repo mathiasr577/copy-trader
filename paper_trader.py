@@ -68,7 +68,6 @@ def get_token_info(token_address):
 
 def copy_trade(wallet, token, action, amount):
     """Copia un trade con límite de posiciones abiertas y sistema híbrido"""
-    # Verificar límite de posiciones abiertas
     open_count = len(state['positions'])
     if open_count >= config.MAX_OPEN_POSITIONS and action == 'buy':
         logger.info(f"❌ MAX {config.MAX_OPEN_POSITIONS} posiciones abiertas ({open_count}), ignorando buy de {wallet[:8]}")
@@ -79,16 +78,13 @@ def copy_trade(wallet, token, action, amount):
             logger.info(f"Ya tenemos posición en {token[:8]}")
             return
         
-        # Calcular tamaño de posición con sistema híbrido
         position_size = config.calculate_position_size(state['capital'])
         
-        # Obtener precio actual
         price = get_token_price(token)
         if not price:
             logger.error(f"No se pudo obtener precio para {token[:8]}")
             return
         
-        # Registrar entrada
         state['positions'][token] = {
             'wallet': wallet,
             'entry_price': price,
@@ -115,22 +111,18 @@ def close_position(token, reason):
     
     position = state['positions'][token]
     
-    # Obtener precio actual
     current_price = get_token_price(token)
     if not current_price:
         logger.error(f"No se pudo obtener precio para cerrar {token[:8]}")
         return
     
-    # Calcular PnL
     entry_price = position['entry_price']
     amount = position['amount']
     pnl = amount * ((current_price - entry_price) / entry_price)
     pnl_percent = ((current_price - entry_price) / entry_price) * 100
     
-    # Devolver capital
     state['capital'] += amount + pnl
     
-    # Registrar en historial
     hold_time = time.time() - position['entry_time']
     trade_record = {
         'token': token,
@@ -147,7 +139,6 @@ def close_position(token, reason):
     }
     state['history'].append(trade_record)
     
-    # Remover posición
     del state['positions'][token]
     
     emoji = "🟢" if pnl > 0 else "🔴"
@@ -160,7 +151,7 @@ def check_stop_loss():
     """
     Revisa todas las posiciones abiertas para:
     1. Stop loss (-12%)
-    2. Take profit (+25%)
+    2. Take profit (+100%)
     3. Tiempo máximo de hold (4h meme / 24h proyecto)
     """
     import copy
@@ -168,7 +159,6 @@ def check_stop_loss():
     
     for token, position in positions_copy.items():
         try:
-            # Obtener precio actual
             current_price = get_token_price(token)
             if not current_price:
                 continue
@@ -176,22 +166,17 @@ def check_stop_loss():
             entry_price = position['entry_price']
             pnl_percent = ((current_price - entry_price) / entry_price) * 100
             
-            # CHECK 1: Stop Loss
             if pnl_percent <= -config.STOP_LOSS_PERCENT:
                 logger.warning(f"🛑 STOP LOSS activado para {token[:8]}: {pnl_percent:.2f}%")
                 close_position(token, "STOP_LOSS")
                 continue
             
-            # CHECK 2: Take Profit
             if pnl_percent >= config.TAKE_PROFIT_PERCENT:
                 logger.info(f"🎯 TAKE PROFIT activado para {token[:8]}: {pnl_percent:.2f}%")
                 close_position(token, "TAKE_PROFIT")
                 continue
             
-            # CHECK 3: Tiempo máximo de hold
             position_age = time.time() - position['entry_time']
-            
-            # Obtener info del token para clasificar
             token_data = get_token_info(token)
             max_hold = config.get_hold_time_limit(token_data)
             
@@ -205,19 +190,62 @@ def check_stop_loss():
         except Exception as e:
             logger.error(f"Error en check_stop_loss para {token[:8]}: {e}")
 
-def print_summary():
-    """Imprime resumen del estado actual"""
+def get_summary():
+    """Retorna resumen del estado para /api/paper"""
     total_pnl = sum(t['pnl'] for t in state['history'])
     wins = len([t for t in state['history'] if t['pnl'] > 0])
     losses = len([t for t in state['history'] if t['pnl'] <= 0])
     win_rate = (wins / len(state['history']) * 100) if state['history'] else 0
-    
+
+    return {
+        "capital": round(state['capital'], 2),
+        "initial_capital": config.INITIAL_CAPITAL,
+        "total_pnl": round(total_pnl, 2),
+        "total_pnl_percent": round((total_pnl / config.INITIAL_CAPITAL) * 100, 2),
+        "open_positions": len(state['positions']),
+        "max_positions": config.MAX_OPEN_POSITIONS,
+        "total_trades": len(state['history']),
+        "wins": wins,
+        "losses": losses,
+        "win_rate": round(win_rate, 1),
+        "history": state['history'][-20:]
+    }
+
+def get_portfolio():
+    """Retorna posiciones abiertas para /api/portfolio"""
+    result = []
+    for token, position in state['positions'].items():
+        current_price = get_token_price(token)
+        pnl = 0
+        pnl_percent = 0
+        if current_price:
+            pnl = position['amount'] * ((current_price - position['entry_price']) / position['entry_price'])
+            pnl_percent = ((current_price - position['entry_price']) / position['entry_price']) * 100
+
+        result.append({
+            "token": token,
+            "token_short": token[:8],
+            "wallet": position['wallet'],
+            "wallet_short": position['wallet'][:8],
+            "entry_price": position['entry_price'],
+            "current_price": current_price,
+            "amount": position['amount'],
+            "pnl": round(pnl, 2),
+            "pnl_percent": round(pnl_percent, 2),
+            "hold_time_hours": round((time.time() - position['entry_time']) / 3600, 1),
+            "entry_time": position['entry_time']
+        })
+    return result
+
+def print_summary():
+    """Imprime resumen del estado actual en logs"""
+    summary = get_summary()
     logger.info("=" * 60)
-    logger.info(f"💰 CAPITAL: ${state['capital']:.2f}")
-    logger.info(f"📊 PnL TOTAL: ${total_pnl:.2f}")
-    logger.info(f"📈 TRADES: {len(state['history'])} total | {wins}W / {losses}L ({win_rate:.1f}% WR)")
-    logger.info(f"📦 POSICIONES ABIERTAS: {len(state['positions'])}")
+    logger.info(f"💰 CAPITAL: ${summary['capital']:.2f}")
+    logger.info(f"📊 PnL TOTAL: ${summary['total_pnl']:.2f} ({summary['total_pnl_percent']:+.2f}%)")
+    logger.info(f"📈 TRADES: {summary['total_trades']} total | {summary['wins']}W / {summary['losses']}L ({summary['win_rate']:.1f}% WR)")
+    logger.info(f"📦 POSICIONES ABIERTAS: {summary['open_positions']}/{summary['max_positions']}")
     logger.info("=" * 60)
 
-# Exportar funciones necesarias
-__all__ = ['copy_trade', 'check_stop_loss', 'load_state', 'save_state', 'print_summary', 'state']
+__all__ = ['copy_trade', 'check_stop_loss', 'load_state', 'save_state',
+           'print_summary', 'get_summary', 'get_portfolio', 'state']
