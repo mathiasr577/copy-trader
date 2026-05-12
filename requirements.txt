@@ -2,3 +2,4 @@ flask
 flask-cors
 requests
 websocket-clientpython-dotenv
+python-dotenv
