@@ -5,19 +5,16 @@ import requests
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-import websocket  # pip install websocket-client
+import websocket
 import config
 from config import RPC_URL, POLL_INTERVAL
 from parser import parse_swap
 
 TRADES_FILE = "trades_history.json"
 
-HELIUS_API_KEY = getattr(config, "HELIUS_API_KEY", "4695b324-4dd5-420c-890e-1d7cf26762c1")
-
-# Helius Developer con Enhanced WebSockets
+HELIUS_API_KEY = config.HELIUS_API_KEY
 WS_URL = f"wss://mainnet.helius-rpc.com/?api-key={HELIUS_API_KEY}"
 
-# Thread pool listo — evita overhead de crear threads por cada tx
 _executor = ThreadPoolExecutor(max_workers=8)
 
 def load_trades():
@@ -38,7 +35,7 @@ last_seen = {}
 _trades_lock = threading.Lock()
 
 # ──────────────────────────────────────────────
-# RPC — solo para el poll de respaldo
+# RPC
 # ──────────────────────────────────────────────
 
 def rpc(method, params):
@@ -46,7 +43,7 @@ def rpc(method, params):
         r = requests.post(RPC_URL, json={
             "jsonrpc": "2.0", "id": 1,
             "method": method, "params": params
-        }, timeout=5)  # 5s agresivo — si tarda más, algo está mal
+        }, timeout=5)
         return r.json().get("result")
     except Exception as e:
         print(f"[rpc error] {method}: {e}")
@@ -63,14 +60,12 @@ def get_tx(sig):
 # ──────────────────────────────────────────────
 
 def _is_duplicate(swap):
-    """Chequea duplicados por signature contra los últimos 20 trades."""
     return any(
         t.get("signature") == swap.get("signature")
         for t in detected_trades[:20]
     )
 
 def handle_swap(swap, source="WS"):
-    """Registra el swap y dispara paper trader. Thread-safe."""
     global detected_trades
 
     with _trades_lock:
@@ -84,45 +79,32 @@ def handle_swap(swap, source="WS"):
     icon = "🟢" if swap["action"] == "BUY" else "🔴"
     print(f"{icon} [{source}] {swap['action']} | {swap['wallet_short']} | {swap['token_short']} | {swap['amount']} | {swap['time']}")
 
-    # Paper trader
     try:
-        from paper_trader import process_trade, check_stop_take, save_state
-        process_trade(swap)
-        check_stop_take()
+        from paper_trader import copy_trade, check_stop_loss, save_state
+        action = swap['action'].lower()  # 'buy' o 'sell'
+        copy_trade(swap['wallet'], swap['token'], action, swap.get('amount', 0))
+        check_stop_loss()
         save_state()
     except Exception as e:
         print(f"[paper error] {e}")
 
 def handle_ws_transaction(wallet, tx_data):
-    """
-    Parsea la tx que llegó directo del WS (transactionSubscribe).
-    tx_data ya tiene el formato completo — cero RPC call extra.
-    """
     try:
-        # transactionSubscribe manda { transaction, meta, slot, blockTime }
         tx = {
             "meta": tx_data.get("meta", {}),
             "transaction": tx_data.get("transaction", {}),
             "blockTime": tx_data.get("blockTime", int(time.time())),
         }
-
         swap = parse_swap(tx, wallet)
         if not swap:
             return
-
         ts = datetime.fromtimestamp(swap["block_time"]).strftime("%H:%M:%S")
         swap["time"] = ts
-
         handle_swap(swap, source="WS")
-
     except Exception as e:
         print(f"[ws handler error] {wallet[:8]}...: {e}")
 
 def handle_ws_signature(wallet, sig):
-    """
-    Fallback: si transactionSubscribe falla, usamos logsSubscribe
-    y buscamos la tx via RPC.
-    """
     try:
         tx = get_tx(sig)
         if not tx:
@@ -143,9 +125,9 @@ def handle_ws_signature(wallet, sig):
 class HeliusWS:
     def __init__(self):
         self.ws = None
-        self.sub_ids = {}        # wallet → sub_id
-        self.id_to_wallet = {}   # sub_id → wallet
-        self.req_to_wallet = {}  # req_id → wallet
+        self.sub_ids = {}
+        self.id_to_wallet = {}
+        self.req_to_wallet = {}
         self._req_id = 1
         self._lock = threading.Lock()
         self._connected = False
@@ -160,21 +142,19 @@ class HeliusWS:
     def _subscribe(self, ws, wallet):
         rid = self._next_id()
         self.req_to_wallet[rid] = wallet
-
-        # transactionSubscribe — manda la tx completa, cero RPC extra
         msg = {
             "jsonrpc": "2.0",
             "id": rid,
             "method": "transactionSubscribe",
             "params": [
                 {
-                    "accountInclude": [wallet],  # Solo txs que involucran esta wallet
-                    "failed": False,             # Ignorar txs fallidas
+                    "accountInclude": [wallet],
+                    "failed": False,
                 },
                 {
                     "commitment": "confirmed",
                     "encoding": "json",
-                    "transactionDetails": "full",  # meta + balances completos
+                    "transactionDetails": "full",
                     "maxSupportedTransactionVersion": 0,
                 }
             ]
@@ -192,7 +172,7 @@ class HeliusWS:
 
     def on_open(self, ws):
         self._connected = True
-        wallets = list(config.WATCHLIST)
+        wallets = list(config.WATCHLIST)  # ✅ Ahora es lista real
         print(f"[ws] Conectado — suscribiendo {len(wallets)} wallets con transactionSubscribe...")
         for wallet in wallets:
             self._subscribe(ws, wallet)
@@ -203,7 +183,6 @@ class HeliusWS:
         except Exception:
             return
 
-        # Confirmación de suscripción
         if "id" in data and "result" in data and isinstance(data["result"], int):
             req_id = data["id"]
             sub_id = data["result"]
@@ -214,21 +193,16 @@ class HeliusWS:
                 print(f"[ws] ✓ {wallet[:8]}... suscrito (sub_id={sub_id})")
             return
 
-        # Notificación de transacción completa
         if data.get("method") == "transactionNotification":
             params = data.get("params", {})
             sub_id = params.get("subscription")
             result = params.get("result", {})
-
             wallet = self.id_to_wallet.get(sub_id)
             if not wallet:
                 return
-
-            # Despachar al thread pool — no bloquea el WS
             _executor.submit(handle_ws_transaction, wallet, result)
             return
 
-        # Fallback: logsNotification
         if data.get("method") == "logsNotification":
             params = data.get("params", {})
             sub_id = params.get("subscription")
@@ -248,11 +222,11 @@ class HeliusWS:
         print(f"[ws] Desconectado (code={code}) — reconectando en 3s...")
 
     def sync_subscriptions(self):
-        """Sync wallets agregadas/removidas sin reiniciar."""
+        """Sync wallets agregadas/removidas sin reiniciar WS"""
         if not self._connected or not self.ws:
             return
 
-        current = set(config.WATCHLIST)
+        current = set(config.WATCHLIST)   # ✅ Lista real
         subscribed = set(self.sub_ids.keys())
 
         for wallet in current - subscribed:
@@ -280,7 +254,6 @@ class HeliusWS:
                     on_error=self.on_error,
                     on_close=self.on_close,
                 )
-                # ping_interval mantiene la conexión viva
                 self.ws.run_forever(ping_interval=20, ping_timeout=8)
             except Exception as e:
                 print(f"[ws] Excepción: {e}")
@@ -291,9 +264,8 @@ class HeliusWS:
         self._thread.start()
         return self
 
-
 # ──────────────────────────────────────────────
-# Poll de respaldo — solo para gaps del WS
+# Poll de respaldo
 # ──────────────────────────────────────────────
 
 def poll_wallet(wallet):
@@ -326,11 +298,9 @@ def poll_wallet(wallet):
         swap = parse_swap(tx, wallet)
         if not swap:
             continue
-
         ts = datetime.fromtimestamp(swap["block_time"]).strftime("%H:%M:%S")
         swap["time"] = ts
         handle_swap(swap, source="poll")
-
 
 # ──────────────────────────────────────────────
 # Entry point
@@ -340,7 +310,7 @@ def run_loop():
     print(f"[tracker] Iniciando — {len(config.WATCHLIST)} wallets")
 
     ws_manager = HeliusWS().start()
-    time.sleep(2)  # Dar tiempo a conectar
+    time.sleep(2)
 
     print(f"[tracker] WS activo — poll de respaldo cada {POLL_INTERVAL}s")
 
@@ -348,11 +318,9 @@ def run_loop():
     while True:
         cycle += 1
 
-        # Sync wallets nuevas/removidas
         ws_manager.sync_subscriptions()
 
-        # Poll de respaldo — sin sleep entre wallets
-        for wallet in list(config.WATCHLIST):
+        for wallet in list(config.WATCHLIST):   # ✅ Lista real
             try:
                 poll_wallet(wallet)
             except Exception as e:
