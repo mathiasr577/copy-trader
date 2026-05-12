@@ -1,121 +1,70 @@
-import json
 import os
+from dotenv import load_dotenv
 
-HELIUS_API_KEY = "4695b324-4dd5-420c-890e-1d7cf26762c1"
-BIRDEYE_API_KEY = "8f4c580eed1e490caeba742904617a07"
+load_dotenv()
 
-# Helius Developer plan con Enhanced WebSockets
+# API Keys
+HELIUS_API_KEY = os.getenv('HELIUS_API_KEY')
 RPC_URL = f"https://mainnet.helius-rpc.com/?api-key={HELIUS_API_KEY}"
+BIRDEYE_API_KEY = os.getenv('BIRDEYE_API_KEY')
 
-BLACKLIST = {
-    "HkFGQsW8mr8DTC2AE2WcC7MzwSnynfEryGMQSht271nf",
-}
+# Paper Trading
+PAPER_TRADING = True
+INITIAL_CAPITAL = 1000
 
-def load_watchlist():
-    if os.path.exists("watchlist.json"):
-        try:
-            with open("watchlist.json") as f:
-                content = f.read().strip()
-                if not content:
-                    return []
-                data = json.loads(content)
+# Position Sizing - SISTEMA HÍBRIDO
+CAPITAL_MODE = "HYBRID"
+MIN_POSITION_SIZE = 30
+MAX_POSITION_SIZE = 100
+POSITION_SIZE_PCT = 5
 
-                # Soporta ambos formatos:
-                # {"addresses": [...]}  ← formato viejo
-                # {"wallets": [...]}    ← formato nuevo (lista de strings o dicts)
-                addresses = data.get("addresses", [])
+# Risk Management
+STOP_LOSS_PERCENT = 12
+TAKE_PROFIT_PERCENT = 25
+MAX_OPEN_POSITIONS = 8
 
-                if not addresses:
-                    wallets = data.get("wallets", [])
-                    for w in wallets:
-                        if isinstance(w, str):
-                            addresses.append(w)
-                        elif isinstance(w, dict) and "address" in w:
-                            addresses.append(w["address"])
+# Time Limits
+MAX_HOLD_TIME_SHORT = 4 * 3600
+MAX_HOLD_TIME_LONG = 24 * 3600
 
-                return [a for a in addresses if a not in BLACKLIST]
-        except Exception as e:
-            print(f"[config] Error cargando watchlist: {e}")
-            return []
-    return []
+# Criterios proyecto serio
+SERIOUS_PROJECT_MCAP = 5_000_000
+SERIOUS_PROJECT_LIQUIDITY = 500_000
+SERIOUS_PROJECT_HOLDERS = 5000
 
-def load_wallet_details():
-    if os.path.exists("watchlist.json"):
-        try:
-            with open("watchlist.json") as f:
-                content = f.read().strip()
-                if not content:
-                    return {}
-                data = json.loads(content)
-                wallets = data.get("wallets", [])
-                result = {}
-                for w in wallets:
-                    if isinstance(w, dict) and "address" in w:
-                        result[w["address"]] = w
-                return result
-        except Exception:
-            return {}
-    return {}
+# Timing
+POLL_INTERVAL = 60
+STOP_LOSS_CHECK_INTERVAL = 10
 
-WATCHLIST = load_watchlist()
-POLL_INTERVAL = 20
+# Watchlist
+WATCHLIST = 'watchlist.json'
 
-PENDING_WALLETS = []
+def calculate_position_size(current_capital):
+    """Calcula tamaño de posición con sistema híbrido"""
+    dynamic_size = current_capital * (POSITION_SIZE_PCT / 100)
+    position_size = max(MIN_POSITION_SIZE, dynamic_size)
+    position_size = min(MAX_POSITION_SIZE, position_size)
+    return round(position_size, 2)
 
-STABLECOINS = {
-    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-    "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
-    "So11111111111111111111111111111111111111112",
-}
+def is_serious_project(token_data):
+    """Detecta si es proyecto serio vs meme coin"""
+    mcap = token_data.get('market_cap', 0)
+    liquidity = token_data.get('liquidity', 0)
+    holder_count = token_data.get('holder_count', 0)
+    
+    serious_signals = 0
+    if mcap > SERIOUS_PROJECT_MCAP:
+        serious_signals += 1
+    if liquidity > SERIOUS_PROJECT_LIQUIDITY:
+        serious_signals += 1
+    if holder_count > SERIOUS_PROJECT_HOLDERS:
+        serious_signals += 1
+    
+    return serious_signals >= 2
 
-def save_watchlist():
-    """Siempre guarda con ambas keys para compatibilidad."""
-    existing_details = load_wallet_details()
-    wallets_list = []
-    for a in WATCHLIST:
-        if a in existing_details:
-            wallets_list.append(existing_details[a])
-        else:
-            wallets_list.append({"address": a})
-    with open("watchlist.json", "w") as f:
-        json.dump({
-            "addresses": WATCHLIST,       # ← lo que load_watchlist() lee
-            "wallets": wallets_list        # ← detalles extras
-        }, f, indent=2)
-
-def add_to_watchlist(address):
-    if address in BLACKLIST:
-        return False, "blacklisted"
-    if address in WATCHLIST:
-        return False, "already exists"
-    WATCHLIST.append(address)
-    save_watchlist()
-    dismiss_pending(address)
-    return True, "added"
-
-def remove_from_watchlist(address):
-    if address not in WATCHLIST:
-        return False, "not found"
-    WATCHLIST.remove(address)
-    save_watchlist()
-    return True, "removed"
-
-def add_pending_wallet(wallet_data):
-    address = wallet_data.get("address")
-    if not address:
-        return False, "no address"
-    if address in BLACKLIST:
-        return False, "blacklisted"
-    if address in WATCHLIST:
-        return False, "already in watchlist"
-    for p in PENDING_WALLETS:
-        if p.get("address") == address:
-            return False, "already pending"
-    PENDING_WALLETS.append(wallet_data)
-    return True, "added to pending"
-
-def dismiss_pending(address):
-    global PENDING_WALLETS
-    before = len(PENDING_WALLETS)
-    PENDING_WALLETS = [p for p in PENDING_WALLETS if p.get("address") != address]
-    return len(PENDING_WALLETS) < before
+def get_hold_time_limit(token_data):
+    """Retorna tiempo máximo de hold según tipo de proyecto"""
+    if is_serious_project(token_data):
+        return MAX_HOLD_TIME_LONG
+    else:
+        return MAX_HOLD_TIME_SHORT

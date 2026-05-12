@@ -1,220 +1,223 @@
 import json
-import os
-import time
-import threading
+import logging
 import requests
+import time
 from datetime import datetime
-from config import BIRDEYE_API_KEY
+import config
 
-BIRDEYE_HEADERS = {
-    "X-API-KEY": BIRDEYE_API_KEY,
-    "x-chain": "solana"
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# Estado del paper trading
+state = {
+    'capital': config.INITIAL_CAPITAL,
+    'positions': {},
+    'history': []
 }
 
-CAPITAL = 1000
-MAX_PER_TRADE = 0.05
-STOP_LOSS = 0.15          # Stop fijo inicial (15%) — piso de entrada
-TRAILING_STOP = 0.30      # Trailing stop (30% desde el máximo histórico)
-TAKE_PROFIT = 0.50
-
-STATE_FILE = "paper_state.json"
-_lock = threading.Lock()
-
 def load_state():
-    global portfolio, trade_history, current_capital
-    if os.path.exists(STATE_FILE):
-        try:
-            with open(STATE_FILE, "r") as f:
-                data = json.load(f)
-            summary = data.get("summary", {})
-            current_capital = summary.get("capital_actual", CAPITAL)
-            trade_history = summary.get("historial", [])
-            portfolio = {p["token"]: p for p in data.get("portfolio", [])}
-            for token, pos in portfolio.items():
-                if "highest_price" not in pos:
-                    pos["highest_price"] = pos["entry_price"]
-            print(f"[paper] Estado cargado: capital=${current_capital:.2f}, {len(portfolio)} posiciones abiertas, {len(trade_history)} trades")
-        except Exception as e:
-            print(f"[paper] Error cargando estado: {e}")
-
-portfolio = {}
-trade_history = []
-starting_capital = CAPITAL
-current_capital = CAPITAL
-
-load_state()
-
-def get_token_price(token_address):
+    """Carga el estado desde archivo"""
     try:
-        url = f"https://public-api.birdeye.so/defi/price"
-        params = {"address": token_address}
-        r = requests.get(url, headers=BIRDEYE_HEADERS, params=params, timeout=5)
-        data = r.json()
-        return data.get("data", {}).get("value", 0)
-    except Exception:
-        return 0
-
-def simulate_buy(swap):
-    global current_capital, portfolio
-
-    token = swap["token"]
-    wallet = swap["wallet_short"]
-
-    with _lock:
-        if token in portfolio:
-            return
-
-        price = get_token_price(token)
-        if not price or price <= 0:
-            return
-
-        position_size = current_capital * MAX_PER_TRADE
-        if position_size > current_capital:
-            return
-
-        tokens_bought = position_size / price
-        current_capital -= position_size
-
-        stop_loss_price = price * (1 - STOP_LOSS)
-        trailing_stop_price = price * (1 - TRAILING_STOP)
-
-        portfolio[token] = {
-            "token": token,
-            "token_short": swap["token_short"],
-            "copied_from": wallet,
-            "entry_price": price,
-            "highest_price": price,
-            "tokens": tokens_bought,
-            "invested": position_size,
-            "entry_time": datetime.now().strftime("%H:%M:%S"),
-            "stop_loss": stop_loss_price,
-            "trailing_stop": trailing_stop_price,
-            "take_profit": price * (1 + TAKE_PROFIT),
-        }
-
-    print(f"[paper] 🟢 BUY | {swap['token_short']} | ${position_size:.2f} @ ${price:.6f} | stop=${stop_loss_price:.6f} | copiando {wallet}")
-
-def simulate_sell(swap):
-    token = swap["token"]
-
-    with _lock:
-        if token not in portfolio:
-            return
-        pos = portfolio[token]
-        price = get_token_price(token)
-        if not price or price <= 0:
-            return
-        _close_position(token, pos, price, reason="SELL")
-
-def _close_position(token, pos, price, reason="SELL"):
-    """Cierra una posición. Debe llamarse con _lock adquirido."""
-    global current_capital, trade_history
-
-    value = pos["tokens"] * price
-    pnl = value - pos["invested"]
-    pnl_pct = (pnl / pos["invested"]) * 100
-    current_capital += value
-
-    peak_pct = ((pos["highest_price"] - pos["entry_price"]) / pos["entry_price"]) * 100
-
-    result = {
-        "token": pos["token_short"],
-        "copied_from": pos["copied_from"],
-        "invested": round(pos["invested"], 2),
-        "returned": round(value, 2),
-        "pnl": round(pnl, 2),
-        "pnl_pct": round(pnl_pct, 1),
-        "peak_pct": round(peak_pct, 1),
-        "entry_time": pos["entry_time"],
-        "exit_time": datetime.now().strftime("%H:%M:%S"),
-        "exit_reason": reason,
-        "result": "WIN" if pnl > 0 else "LOSS"
-    }
-
-    trade_history.append(result)
-    del portfolio[token]
-
-    icon = "✅" if pnl > 0 else "❌"
-    print(f"[paper] {icon} {reason} | {pos['token_short']} | PnL: ${pnl:.2f} ({pnl_pct:.1f}%) | peak: +{peak_pct:.1f}%")
-
-def check_stop_take():
-    """Chequea stops y take profits. Thread-safe."""
-    to_close = []
-
-    with _lock:
-        for token, pos in list(portfolio.items()):
-            price = get_token_price(token)
-            if not price or price <= 0:
-                continue
-
-            # Actualizar máximo histórico y trailing stop
-            if price > pos["highest_price"]:
-                pos["highest_price"] = price
-                new_trailing = price * (1 - TRAILING_STOP)
-                if new_trailing > pos["trailing_stop"]:
-                    pos["trailing_stop"] = new_trailing
-                    print(f"[paper] 📈 TRAILING UP | {pos['token_short']} | nuevo stop=${new_trailing:.6f} (precio=${price:.6f})")
-
-            active_stop = max(pos["stop_loss"], pos["trailing_stop"])
-
-            if price <= active_stop:
-                stop_type = "TRAILING STOP" if pos["trailing_stop"] > pos["stop_loss"] else "STOP LOSS"
-                print(f"[paper] 🛑 {stop_type} | {pos['token_short']} | precio=${price:.6f} <= stop=${active_stop:.6f}")
-                to_close.append((stop_type, token, price))
-
-            elif price >= pos["take_profit"]:
-                print(f"[paper] 🎯 TAKE PROFIT | {pos['token_short']} | precio=${price:.6f}")
-                to_close.append(("TAKE PROFIT", token, price))
-
-        for reason, token, price in to_close:
-            if token in portfolio:
-                _close_position(token, portfolio[token], price, reason=reason)
-
-    if to_close:
+        with open('paper_state.json', 'r') as f:
+            loaded = json.load(f)
+            state.update(loaded)
+            logger.info(f"Estado cargado: ${state['capital']:.2f} capital, {len(state['positions'])} posiciones")
+    except FileNotFoundError:
+        logger.info("No hay estado previo, iniciando desde cero")
         save_state()
 
-def _stop_loss_loop():
-    """Thread dedicado — corre check_stop_take cada segundo independientemente de trades nuevos."""
-    print("[paper] 🔁 Stop loss loop iniciado — chequeando cada 10s")
-    while True:
-        try:
-            check_stop_take()
-        except Exception as e:
-            print(f"[paper] Error en stop loop: {e}")
-        time.sleep(10)
-
-# Arrancar thread dedicado al importar el módulo
-_stop_thread = threading.Thread(target=_stop_loss_loop, daemon=True)
-_stop_thread.start()
-
-def get_summary():
-    total_trades = len(trade_history)
-    wins = sum(1 for t in trade_history if t["result"] == "WIN")
-    total_pnl = current_capital - starting_capital
-    win_rate = (wins / total_trades * 100) if total_trades > 0 else 0
-
-    return {
-        "capital_inicial": starting_capital,
-        "capital_actual": round(current_capital, 2),
-        "pnl_total": round(total_pnl, 2),
-        "pnl_pct": round((total_pnl / starting_capital) * 100, 1),
-        "trades_totales": total_trades,
-        "wins": wins,
-        "losses": total_trades - wins,
-        "win_rate": round(win_rate, 1),
-        "posiciones_abiertas": len(portfolio),
-        "historial": trade_history
-    }
-
-def process_trade(swap):
-    if swap["action"] == "BUY":
-        simulate_buy(swap)
-    elif swap["action"] == "SELL":
-        simulate_sell(swap)
-
 def save_state():
-    with open(STATE_FILE, "w") as f:
-        json.dump({
-            "summary": get_summary(),
-            "portfolio": list(portfolio.values())
-        }, f, indent=2)
+    """Guarda el estado a archivo"""
+    with open('paper_state.json', 'w') as f:
+        json.dump(state, f, indent=2)
+
+def get_token_price(token_address):
+    """Obtiene el precio actual de un token desde Birdeye"""
+    try:
+        url = "https://public-api.birdeye.so/defi/price"
+        headers = {"X-API-KEY": config.BIRDEYE_API_KEY}
+        params = {"address": token_address}
+        
+        response = requests.get(url, headers=headers, params=params, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            return data.get('data', {}).get('value')
+    except Exception as e:
+        logger.error(f"Error obteniendo precio: {e}")
+    return None
+
+def get_token_info(token_address):
+    """Obtiene información del token desde Birdeye para clasificarlo"""
+    try:
+        url = "https://public-api.birdeye.so/defi/token_overview"
+        headers = {"X-API-KEY": config.BIRDEYE_API_KEY}
+        params = {"address": token_address}
+        
+        response = requests.get(url, headers=headers, params=params, timeout=5)
+        if response.status_code == 200:
+            data = response.json().get('data', {})
+            return {
+                'market_cap': data.get('mc', 0),
+                'liquidity': data.get('liquidity', 0),
+                'holder_count': data.get('holder', 0)
+            }
+    except Exception as e:
+        logger.error(f"Error obteniendo info token: {e}")
+    
+    return {'market_cap': 0, 'liquidity': 0, 'holder_count': 0}
+
+def copy_trade(wallet, token, action, amount):
+    """Copia un trade con límite de posiciones abiertas y sistema híbrido"""
+    # Verificar límite de posiciones abiertas
+    open_count = len(state['positions'])
+    if open_count >= config.MAX_OPEN_POSITIONS and action == 'buy':
+        logger.info(f"❌ MAX {config.MAX_OPEN_POSITIONS} posiciones abiertas ({open_count}), ignorando buy de {wallet[:8]}")
+        return
+    
+    if action == 'buy':
+        if token in state['positions']:
+            logger.info(f"Ya tenemos posición en {token[:8]}")
+            return
+        
+        # Calcular tamaño de posición con sistema híbrido
+        position_size = config.calculate_position_size(state['capital'])
+        
+        # Obtener precio actual
+        price = get_token_price(token)
+        if not price:
+            logger.error(f"No se pudo obtener precio para {token[:8]}")
+            return
+        
+        # Registrar entrada
+        state['positions'][token] = {
+            'wallet': wallet,
+            'entry_price': price,
+            'entry_time': time.time(),
+            'amount': position_size
+        }
+        
+        state['capital'] -= position_size
+        
+        logger.info(f"🟢 BUY {token[:8]} | Wallet: {wallet[:8]} | ${position_size} @ ${price:.8f}")
+        logger.info(f"💰 Capital restante: ${state['capital']:.2f} | Posiciones: {len(state['positions'])}/{config.MAX_OPEN_POSITIONS}")
+        
+    elif action == 'sell':
+        if token not in state['positions']:
+            logger.info(f"No tenemos posición en {token[:8]}")
+            return
+        
+        close_position(token, "WALLET_SELL")
+
+def close_position(token, reason):
+    """Cierra una posición y registra el resultado"""
+    if token not in state['positions']:
+        return
+    
+    position = state['positions'][token]
+    
+    # Obtener precio actual
+    current_price = get_token_price(token)
+    if not current_price:
+        logger.error(f"No se pudo obtener precio para cerrar {token[:8]}")
+        return
+    
+    # Calcular PnL
+    entry_price = position['entry_price']
+    amount = position['amount']
+    pnl = amount * ((current_price - entry_price) / entry_price)
+    pnl_percent = ((current_price - entry_price) / entry_price) * 100
+    
+    # Devolver capital
+    state['capital'] += amount + pnl
+    
+    # Registrar en historial
+    hold_time = time.time() - position['entry_time']
+    trade_record = {
+        'token': token,
+        'wallet': position['wallet'],
+        'entry_price': entry_price,
+        'exit_price': current_price,
+        'entry_time': position['entry_time'],
+        'exit_time': time.time(),
+        'hold_time': hold_time,
+        'amount': amount,
+        'pnl': pnl,
+        'pnl_percent': pnl_percent,
+        'reason': reason
+    }
+    state['history'].append(trade_record)
+    
+    # Remover posición
+    del state['positions'][token]
+    
+    emoji = "🟢" if pnl > 0 else "🔴"
+    logger.info(f"{emoji} CLOSE {token[:8]} | {reason} | PnL: ${pnl:.2f} ({pnl_percent:+.2f}%) | Hold: {hold_time/3600:.1f}h")
+    logger.info(f"💰 Capital: ${state['capital']:.2f}")
+    
+    save_state()
+
+def check_stop_loss():
+    """
+    Revisa todas las posiciones abiertas para:
+    1. Stop loss (-12%)
+    2. Take profit (+25%)
+    3. Tiempo máximo de hold (4h meme / 24h proyecto)
+    """
+    import copy
+    positions_copy = copy.deepcopy(state['positions'])
+    
+    for token, position in positions_copy.items():
+        try:
+            # Obtener precio actual
+            current_price = get_token_price(token)
+            if not current_price:
+                continue
+            
+            entry_price = position['entry_price']
+            pnl_percent = ((current_price - entry_price) / entry_price) * 100
+            
+            # CHECK 1: Stop Loss
+            if pnl_percent <= -config.STOP_LOSS_PERCENT:
+                logger.warning(f"🛑 STOP LOSS activado para {token[:8]}: {pnl_percent:.2f}%")
+                close_position(token, "STOP_LOSS")
+                continue
+            
+            # CHECK 2: Take Profit
+            if pnl_percent >= config.TAKE_PROFIT_PERCENT:
+                logger.info(f"🎯 TAKE PROFIT activado para {token[:8]}: {pnl_percent:.2f}%")
+                close_position(token, "TAKE_PROFIT")
+                continue
+            
+            # CHECK 3: Tiempo máximo de hold
+            position_age = time.time() - position['entry_time']
+            
+            # Obtener info del token para clasificar
+            token_data = get_token_info(token)
+            max_hold = config.get_hold_time_limit(token_data)
+            
+            if position_age > max_hold:
+                hours_held = position_age / 3600
+                project_type = "PROYECTO" if config.is_serious_project(token_data) else "MEME"
+                logger.warning(f"⏰ TIME LIMIT para {token[:8]} ({project_type}): {hours_held:.1f}h, cerrando")
+                close_position(token, "TIME_LIMIT")
+                continue
+                
+        except Exception as e:
+            logger.error(f"Error en check_stop_loss para {token[:8]}: {e}")
+
+def print_summary():
+    """Imprime resumen del estado actual"""
+    total_pnl = sum(t['pnl'] for t in state['history'])
+    wins = len([t for t in state['history'] if t['pnl'] > 0])
+    losses = len([t for t in state['history'] if t['pnl'] <= 0])
+    win_rate = (wins / len(state['history']) * 100) if state['history'] else 0
+    
+    logger.info("=" * 60)
+    logger.info(f"💰 CAPITAL: ${state['capital']:.2f}")
+    logger.info(f"📊 PnL TOTAL: ${total_pnl:.2f}")
+    logger.info(f"📈 TRADES: {len(state['history'])} total | {wins}W / {losses}L ({win_rate:.1f}% WR)")
+    logger.info(f"📦 POSICIONES ABIERTAS: {len(state['positions'])}")
+    logger.info("=" * 60)
+
+# Exportar funciones necesarias
+__all__ = ['copy_trade', 'check_stop_loss', 'load_state', 'save_state', 'print_summary', 'state']

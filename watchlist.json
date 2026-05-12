@@ -1,36 +1,16 @@
 {
   "addresses": [
-    "DuUueTpZqXgtBK3eQcMUWZfWF1rncnP3Ed5o7jbChudW",
-    "9GP3Dsi1xnHTbFCWHxzLQHew31yVExuzp8ofeerMAimR",
-    "CDL22EuTKoWeXpiStMWu9pLqLNSn5NkMG3nKoz1YRVUf",
-    "FGZ72HENqfzUv9RiPAFqF7hCCiMZMAa5MYmWangFnZwD",
-    "W5D6nFHPARxc2wHjFgNXpudjnfFuXwWe3cWssyRjf1N",
-    "Cbj482ar1f5b7RvoEFJZEPCeZQ3SYEA5oxFYXmX4Wrio",
-    "DHDhS1jUa1PkJmkqNqAnAzYYfC4y2Xkc5TpKUWKGMaSe",
     "Bz429AezLuxgftrYKGCaTJsjZBN6LibmYp9eVfL9MXZ9",
-    "4sSUcpxq4HqesVUpy16YmVLouQATGEw23TrNrF6GkaBt",
-    "7zenhRwrPi61L2S9SL8VDj88X7oEfese7Mj8WdStxyac",
+    "Cbj482ar1f5b7RvoEFJZEPCeZQ3SYEA5oxFYXmX4Wrio",
     "4W9Y7dR5VVDE9y44RPZekKehZU6HyDDAZnq23i2hdhh2",
-    "FRXuUuPi7KLqnLtYhsrw8AWcygj12uDj36xr5L6yMWNc",
-    "A4f83euLT4sMDiE2xWfmLD7TZD2uZyoToCNLqubxLGrf",
-    "AB41CkfcGdtxeHVJn8BiQrBHXSUnxNbJdbHZNPLTHxVu",
-    "95L1q614PkUfbE4E4tpQKnot4H6SzGXiFP8XUdn4WCi3"
+    "W5D6nFHPARxc2wHjFgNXpudjnfFuXwWe3cWssyRjf1N",
+    "DuUueTpZqXgtBK3eQcMUWZfWF1rncnP3Ed5o7jbChudW"
   ],
   "wallets": [
-    {"address": "DuUueTpZqXgtBK3eQcMUWZfWF1rncnP3Ed5o7jbChudW", "source": "KEEP - 60% WR"},
-    {"address": "9GP3Dsi1xnHTbFCWHxzLQHew31yVExuzp8ofeerMAimR", "source": "KEEP - 100% WR"},
-    {"address": "CDL22EuTKoWeXpiStMWu9pLqLNSn5NkMG3nKoz1YRVUf", "source": "WATCH - borderline"},
-    {"address": "FGZ72HENqfzUv9RiPAFqF7hCCiMZMAa5MYmWangFnZwD", "source": "WATCH - profit pero muchos trades"},
-    {"address": "W5D6nFHPARxc2wHjFgNXpudjnfFuXwWe3cWssyRjf1N", "source": "CIELO"},
-    {"address": "Cbj482ar1f5b7RvoEFJZEPCeZQ3SYEA5oxFYXmX4Wrio", "source": "CIELO"},
-    {"address": "DHDhS1jUa1PkJmkqNqAnAzYYfC4y2Xkc5TpKUWKGMaSe", "source": "CIELO"},
-    {"address": "Bz429AezLuxgftrYKGCaTJsjZBN6LibmYp9eVfL9MXZ9", "source": "CIELO"},
-    {"address": "4sSUcpxq4HqesVUpy16YmVLouQATGEw23TrNrF6GkaBt", "source": "CIELO"},
-    {"address": "7zenhRwrPi61L2S9SL8VDj88X7oEfese7Mj8WdStxyac", "source": "CIELO"},
-    {"address": "4W9Y7dR5VVDE9y44RPZekKehZU6HyDDAZnq23i2hdhh2", "source": "CIELO"},
-    {"address": "FRXuUuPi7KLqnLtYhsrw8AWcygj12uDj36xr5L6yMWNc", "source": "GMGN"},
-    {"address": "A4f83euLT4sMDiE2xWfmLD7TZD2uZyoToCNLqubxLGrf", "source": "GMGN"},
-    {"address": "AB41CkfcGdtxeHVJn8BiQrBHXSUnxNbJdbHZNPLTHxVu", "source": "GMGN"},
-    {"address": "95L1q614PkUfbE4E4tpQKnot4H6SzGXiFP8XUdn4WCi3", "source": "GMGN"}
+    {"address": "Bz429AezLuxgftrYKGCaTJsjZBN6LibmYp9eVfL9MXZ9", "source": "KEEP - 52.6% WR"},
+    {"address": "Cbj482ar1f5b7RvoEFJZEPCeZQ3SYEA5oxFYXmX4Wrio", "source": "KEEP - 50% WR"},
+    {"address": "4W9Y7dR5VVDE9y44RPZekKehZU6HyDDAZnq23i2hdhh2", "source": "WATCH - 40% WR"},
+    {"address": "W5D6nFHPARxc2wHjFgNXpudjnfFuXwWe3cWssyRjf1N", "source": "WATCH - 100% WR"},
+    {"address": "DuUueTpZqXgtBK3eQcMUWZfWF1rncnP3Ed5o7jbChudW", "source": "KEEP - 60% WR anterior"}
   ]
 }
