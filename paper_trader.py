@@ -208,7 +208,7 @@ def get_summary():
         "wins": wins,
         "losses": losses,
         "win_rate": round(win_rate, 1),
-        "history": state['history'][-20:]
+        "history": state["history"][-200:]
     }
 
 def get_portfolio():
